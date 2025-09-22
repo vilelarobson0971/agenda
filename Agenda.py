@@ -27,6 +27,13 @@ NOMES_BANDAS = {
     'S2': 'Banda S2'
 }
 
+# Meses em português
+MESES_PT = {
+    1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+    5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+    9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+}
+
 # ---------------- FUNÇÕES ---------------- #
 
 def carregar_dados():
@@ -46,7 +53,6 @@ def salvar_dados(df):
     df['data'] = pd.to_datetime(df['data']).dt.date
     st.session_state.agenda = df
     df.to_csv("agenda.csv", index=False)
-    st.success("✅ Agendamento salvo com sucesso!")
 
 
 def obter_agendamentos_do_dia(df, dia):
@@ -66,7 +72,7 @@ df_agenda = carregar_dados()
 
 # Data atual
 hoje = date.today()
-mes_atual = st.sidebar.selectbox("Mês", range(1, 13), index=hoje.month-1)
+mes_atual = st.sidebar.selectbox("Mês", range(1, 13), index=hoje.month-1, format_func=lambda m: MESES_PT[m])
 ano_atual = st.sidebar.selectbox("Ano", range(2023, 2031), index=hoje.year-2023)
 
 # ---------------- NOVO AGENDAMENTO ---------------- #
@@ -105,11 +111,12 @@ with st.sidebar.form("novo_agendamento", clear_on_submit=True):
             })
             df_agenda = pd.concat([df_agenda, novo_agendamento], ignore_index=True)
             salvar_dados(df_agenda)
+            st.success("✅ Agendamento salvo com sucesso!")
             st.rerun()
 
 # ---------------- CALENDÁRIO ---------------- #
 
-st.header(f"Calendário de {calendar.month_name[mes_atual]} de {ano_atual}")
+st.header(f"Calendário de {MESES_PT[mes_atual]} de {ano_atual}")
 
 cal = calendar.monthcalendar(ano_atual, mes_atual)
 dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
@@ -167,28 +174,6 @@ for semana in cal:
                     """
                 st.markdown(estilo, unsafe_allow_html=True)
 
-# ---------------- LEGENDA ---------------- #
-
-st.markdown("---")
-st.subheader("Legenda das Bandas")
-cols_legenda = st.columns(6)
-for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
-    with cols_legenda[i]:
-        st.markdown(f"""
-        <div style='
-            background-color: {cor};
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            text-align: center;
-            font-weight: bold;
-            margin: 5px;
-        '>
-            {banda}<br>
-            <small>{NOMES_BANDAS[banda]}</small>
-        </div>
-        """, unsafe_allow_html=True)
-
 # ---------------- LISTA DE AGENDAMENTOS ---------------- #
 
 st.markdown("---")
@@ -201,22 +186,29 @@ if not df_agenda.empty:
     ].sort_values(by=["data", "horario"])
 
     if not agendamentos_mes.empty:
-        for _, agendamento in agendamentos_mes.iterrows():
+        for idx, agendamento in agendamentos_mes.iterrows():
             cor = CORES_BANDAS[agendamento['banda']]
-            st.markdown(f"""
-            <div style='
-                background-color: {cor};
-                color: white;
-                padding: 12px;
-                border-radius: 5px;
-                margin: 5px 0;
-                font-weight: bold;
-            '>
-                📅 {agendamento['data'].strftime('%d/%m/%Y')} - 
-                🎵 {agendamento['banda']} - 
-                ⏰ {agendamento['horario']}
-            </div>
-            """, unsafe_allow_html=True)
+            col1, col2 = st.columns([8, 1])
+            with col1:
+                st.markdown(f"""
+                <div style='
+                    background-color: {cor};
+                    color: white;
+                    padding: 12px;
+                    border-radius: 5px;
+                    margin: 5px 0;
+                    font-weight: bold;
+                '>
+                    📅 {agendamento['data'].strftime('%d/%m/%Y')} - 
+                    🎵 {agendamento['banda']} - 
+                    ⏰ {agendamento['horario']}
+                </div>
+                """, unsafe_allow_html=True)
+            with col2:
+                if st.button("🗑", key=f"del_{idx}"):
+                    df_agenda = df_agenda.drop(idx).reset_index(drop=True)
+                    salvar_dados(df_agenda)
+                    st.rerun()
     else:
         st.info("Nenhum ensaio agendado para este mês.")
 else:
@@ -266,8 +258,8 @@ st.sidebar.info("""
 1. Selecione data, banda e horário
 2. Clique em "Agendar Ensaio"
 3. O calendário será atualizado automaticamente
+4. Para excluir, use o botão 🗑 na lista do mês
 
 **📊 Dados salvos:** Em `agenda.csv` no diretório do app
 **📤 Exportar:** Use o botão para baixar CSV
 """)
-
