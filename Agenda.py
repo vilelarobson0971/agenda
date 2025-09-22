@@ -3,8 +3,7 @@ import pandas as pd
 import datetime
 import calendar
 from datetime import date, timedelta
-import requests
-import io
+import json
 
 # Configuração da página
 st.set_page_config(page_title="Agenda de Ensaios", page_icon="🎵", layout="wide")
@@ -16,95 +15,44 @@ CORES_BANDAS = {
     'D3': '#45B7D1',  # Azul
     'D4': '#96CEB4',  # Verde
     'S1': '#FFEAA7',  # Amarelo
-    'S2': '#DDA0DD'  # Roxo
+    'S2': '#DDA0DD'   # Roxo
 }
 
 # Nomes completos das bandas
 NOMES_BANDAS = {
     'D1': 'Banda D1',
-    'D2': 'Banda D2',
+    'D2': 'Banda D2', 
     'D3': 'Banda D3',
     'D4': 'Banda D4',
     'S1': 'Banda S1',
     'S2': 'Banda S2'
 }
 
-# URL do arquivo CSV no GitHub (substitua pela sua URL)
-GITHUB_CSV_URL = "https://raw.githubusercontent.com/seu-usuario/seu-repositorio/main/agenda_ensaios.csv"
-
-
 def carregar_dados():
-    """Carrega os dados do arquivo CSV do GitHub"""
-    try:
-        # Tenta carregar do GitHub
-        response = requests.get(GITHUB_CSV_URL)
-        if response.status_code == 200:
-            df = pd.read_csv(io.StringIO(response.text))
-            # Converte a coluna de data para datetime
-            df['data'] = pd.to_datetime(df['data']).dt.date
-            return df
-        else:
-            # Se não encontrar, cria um DataFrame vazio
-            return pd.DataFrame(columns=['data', 'banda', 'horario'])
-    except:
-        return pd.DataFrame(columns=['data', 'banda', 'horario'])
-
+    """Carrega os dados da session state ou inicializa"""
+    if 'agenda' not in st.session_state:
+        # Tenta carregar do estado da sessão
+        st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
+    
+    return st.session_state.agenda
 
 def salvar_dados(df):
-    """Salva os dados no arquivo CSV do GitHub (simulação)"""
-    # Em um ambiente real, você usaria a API do GitHub para fazer commit
-    # Aqui vamos simular salvando localmente e instruindo sobre como fazer o upload
-    df.to_csv('agenda_ensaios.csv', index=False)
-    st.success(
-        "Dados salvos localmente. Faça upload manual para o GitHub ou configure GitHub Actions para sincronização automática.")
-
-
-def obter_primeiro_ultimo_dia_mes(data_referencia):
-    """Retorna o primeiro e último dia do mês"""
-    primeiro_dia = date(data_referencia.year, data_referencia.month, 1)
-    ultimo_dia = date(data_referencia.year, data_referencia.month,
-                      calendar.monthrange(data_referencia.year, data_referencia.month)[1])
-    return primeiro_dia, ultimo_dia
-
-
-def gerar_calendario(mes, ano):
-    """Gera uma matriz representando o calendário do mês"""
-    cal = calendar.monthcalendar(ano, mes)
-    return cal
-
+    """Salva os dados na session state"""
+    st.session_state.agenda = df
+    st.success("✅ Agendamento salvo com sucesso!")
 
 def obter_agendamentos_do_dia(df, dia):
     """Retorna os agendamentos para um determinado dia"""
+    if df.empty:
+        return df
+    
+    # Converte para datetime.date se necessário
+    if isinstance(dia, pd.Timestamp):
+        dia = dia.date()
+    elif isinstance(dia, datetime.datetime):
+        dia = dia.date()
+    
     return df[df['data'] == dia]
-
-
-def estilo_dia(dia, agendamentos, hoje):
-    """Aplica estilo CSS para um dia do calendário"""
-    if dia == 0:  # Dia vazio do calendário
-        return "<div style='width:100%; height:100px; background-color:#f0f0f0; border:1px solid #ddd;'></div>"
-
-    estilo = f"<div style='width:100%; height:100px; border:1px solid #ddd; padding:5px;"
-
-    # Destacar dia atual
-    if dia == hoje.day and mes_atual == hoje.month and ano_atual == hoje.year:
-        estilo += "border:2px solid #ff4444;"
-
-    # Verificar se há agendamentos para este dia
-    agendamentos_dia = agendamentos[agendamentos['data'] == date(ano_atual, mes_atual, dia)]
-
-    if not agendamentos_dia.empty:
-        banda = agendamentos_dia.iloc[0]['banda']
-        horario = agendamentos_dia.iloc[0]['horario']
-        cor = CORES_BANDAS.get(banda, '#ffffff')
-        estilo += f"background-color:{cor}; color:white; font-weight:bold;'"
-        estilo += f">{dia}<br><small>{banda}</small><br><small>{horario}</small>"
-    else:
-        estilo += "background-color:white;'"
-        estilo += f">{dia}"
-
-    estilo += "</div>"
-    return estilo
-
 
 # Interface principal
 st.title("🎵 Agenda de Ensaios de Bandas")
@@ -115,24 +63,27 @@ df_agenda = carregar_dados()
 
 # Data atual
 hoje = date.today()
-mes_atual = st.sidebar.selectbox("Mês", range(1, 13), index=hoje.month - 1)
-ano_atual = st.sidebar.selectbox("Ano", range(2023, 2031), index=hoje.year - 2023)
+mes_atual = st.sidebar.selectbox("Mês", range(1, 13), index=hoje.month-1)
+ano_atual = st.sidebar.selectbox("Ano", range(2023, 2031), index=hoje.year-2023)
 
 # Sidebar para novo agendamento
 st.sidebar.header("📅 Novo Agendamento")
 
-with st.sidebar.form("novo_agendamento"):
+with st.sidebar.form("novo_agendamento", clear_on_submit=True):
     data_agendamento = st.date_input("Data do ensaio", min_value=hoje)
-    banda_selecionada = st.selectbox("Banda", list(NOMES_BANDAS.keys()),
-                                     format_func=lambda x: f"{x} - {NOMES_BANDAS[x]}")
+    banda_selecionada = st.selectbox("Banda", list(NOMES_BANDAS.keys()), 
+                                   format_func=lambda x: f"{x} - {NOMES_BANDAS[x]}")
     horario_agendamento = st.time_input("Horário de início", value=datetime.time(19, 0))
-
+    
     submitted = st.form_submit_button("Agendar Ensaio")
-
+    
     if submitted:
         # Verificar se já existe agendamento para esta data
-        agendamento_existente = df_agenda[df_agenda['data'] == data_agendamento]
-
+        if not df_agenda.empty:
+            agendamento_existente = df_agenda[df_agenda['data'] == data_agendamento]
+        else:
+            agendamento_existente = pd.DataFrame()
+        
         if not agendamento_existente.empty:
             st.sidebar.error(f"❌ Já existe um agendamento para {data_agendamento.strftime('%d/%m/%Y')}")
         else:
@@ -141,24 +92,28 @@ with st.sidebar.form("novo_agendamento"):
                 'banda': [banda_selecionada],
                 'horario': [horario_agendamento.strftime('%H:%M')]
             })
-
-            df_agenda = pd.concat([df_agenda, novo_agendamento], ignore_index=True)
+            
+            # Concatena corretamente
+            if df_agenda.empty:
+                df_agenda = novo_agendamento
+            else:
+                df_agenda = pd.concat([df_agenda, novo_agendamento], ignore_index=True)
+            
             salvar_dados(df_agenda)
-            st.sidebar.success("✅ Ensaio agendado com sucesso!")
             st.rerun()
 
 # Exibir calendário
 st.header(f"Calendário de {calendar.month_name[mes_atual]} de {ano_atual}")
 
 # Gerar calendário
-cal = gerar_calendario(mes_atual, ano_atual)
+cal = calendar.monthcalendar(ano_atual, mes_atual)
 
 # Cabeçalho dos dias da semana
 dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 cols = st.columns(7)
 
 for i, dia in enumerate(dias_semana):
-    cols[i].markdown(f"**{dia}**")
+    cols[i].markdown(f"<div style='text-align: center; font-weight: bold;'>{dia}</div>", unsafe_allow_html=True)
 
 # Exibir dias do calendário
 for semana in cal:
@@ -166,28 +121,29 @@ for semana in cal:
     for i, dia in enumerate(semana):
         with cols[i]:
             if dia == 0:
-                st.markdown("<div style='height:100px; background-color:#f8f9fa; border:1px solid #dee2e6;'></div>",
-                            unsafe_allow_html=True)
+                st.markdown("<div style='height:100px; background-color:#f8f9fa; border:1px solid #dee2e6; border-radius:5px;'></div>", 
+                          unsafe_allow_html=True)
             else:
                 data_dia = date(ano_atual, mes_atual, dia)
                 agendamentos_dia = obter_agendamentos_do_dia(df_agenda, data_dia)
-
-                if not agendamentos_dia.empty:
+                
+                if not agendamentos_dia.empty and len(agendamentos_dia) > 0:
                     banda = agendamentos_dia.iloc[0]['banda']
                     horario = agendamentos_dia.iloc[0]['horario']
                     cor = CORES_BANDAS[banda]
-
+                    
                     estilo = f"""
                     <div style='
                         background-color: {cor};
                         color: white;
-                        padding: 10px;
+                        padding: 8px;
                         border-radius: 5px;
                         height: 100px;
-                        border: 2px solid {cor if data_dia != hoje else '#ff4444'};
+                        border: 3px solid {cor if data_dia != hoje else '#ff4444'};
                         font-weight: bold;
+                        text-align: center;
                     '>
-                        <div style='font-size: 1.2em;'>{dia}</div>
+                        <div style='font-size: 1.3em; margin-bottom: 5px;'>{dia}</div>
                         <div style='font-size: 0.9em;'>{banda}</div>
                         <div style='font-size: 0.8em;'>{horario}</div>
                     </div>
@@ -195,17 +151,18 @@ for semana in cal:
                 else:
                     estilo = f"""
                     <div style='
-                        background-color: {'#ffebee' if data_dia == hoje else 'white'};
-                        padding: 10px;
+                        background-color: {'#fff0f0' if data_dia == hoje else 'white'};
+                        padding: 8px;
                         border-radius: 5px;
                         height: 100px;
                         border: 2px solid {'#ff4444' if data_dia == hoje else '#dee2e6'};
+                        text-align: center;
                     '>
-                        <div style='font-size: 1.2em;'>{dia}</div>
+                        <div style='font-size: 1.3em; margin-bottom: 5px;'>{dia}</div>
                         <div style='color: #666; font-size: 0.8em;'>Disponível</div>
                     </div>
                     """
-
+                
                 st.markdown(estilo, unsafe_allow_html=True)
 
 # Legenda das cores
@@ -223,44 +180,90 @@ for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
             border-radius: 5px;
             text-align: center;
             font-weight: bold;
+            margin: 5px;
         '>
-            {banda} - {NOMES_BANDAS[banda]}
+            {banda}<br>
+            <small>{NOMES_BANDAS[banda]}</small>
         </div>
         """, unsafe_allow_html=True)
 
 # Lista de agendamentos do mês
 st.markdown("---")
-st.subheader("Agendamentos do Mês")
+st.subheader("📋 Agendamentos do Mês")
 
-agendamentos_mes = df_agenda[
-    (df_agenda['data'].apply(lambda x: x.month) == mes_atual) &
-    (df_agenda['data'].apply(lambda x: x.year) == ano_atual)
-    ].sort_values('data')
-
-if not agendamentos_mes.empty:
-    for _, agendamento in agendamentos_mes.iterrows():
-        cor = CORES_BANDAS[agendamento['banda']]
-        st.markdown(f"""
-        <div style='
-            background-color: {cor};
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 5px 0;
-        '>
-            <strong>{agendamento['data'].strftime('%d/%m/%Y')}</strong> - 
-            {agendamento['banda']} ({NOMES_BANDAS[agendamento['banda']]}) - 
-            Horário: {agendamento['horario']}
-        </div>
-        """, unsafe_allow_html=True)
+if not df_agenda.empty:
+    # Filtra agendamentos do mês atual
+    agendamentos_mes = []
+    for _, row in df_agenda.iterrows():
+        if row['data'].month == mes_atual and row['data'].year == ano_atual:
+            agendamentos_mes.append(row)
+    
+    agendamentos_mes = sorted(agendamentos_mes, key=lambda x: x['data'])
+    
+    if agendamentos_mes:
+        for agendamento in agendamentos_mes:
+            cor = CORES_BANDAS[agendamento['banda']]
+            st.markdown(f"""
+            <div style='
+                background-color: {cor};
+                color: white;
+                padding: 15px;
+                border-radius: 5px;
+                margin: 5px 0;
+                font-weight: bold;
+            '>
+                📅 {agendamento['data'].strftime('%d/%m/%Y')} - 
+                🎵 {agendamento['banda']} - 
+                ⏰ {agendamento['horario']}
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("Nenhum ensaio agendado para este mês.")
 else:
-    st.info("Nenhum ensaio agendado para este mês.")
+    st.info("Nenhum ensaio agendado ainda.")
 
-# Instruções para sincronização com GitHub
+# Função para exportar/importar dados
+st.sidebar.markdown("---")
+st.sidebar.header("💾 Gerenciar Dados")
+
+# Exportar dados
+if not df_agenda.empty:
+    csv = df_agenda.to_csv(index=False)
+    st.sidebar.download_button(
+        label="📥 Exportar Agenda (CSV)",
+        data=csv,
+        file_name=f"agenda_ensaios_{hoje.strftime('%Y%m%d')}.csv",
+        mime="text/csv"
+    )
+
+# Importar dados
+uploaded_file = st.sidebar.file_uploader("📤 Importar CSV", type=['csv'])
+if uploaded_file is not None:
+    try:
+        novo_df = pd.read_csv(uploaded_file)
+        novo_df['data'] = pd.to_datetime(novo_df['data']).dt.date
+        st.session_state.agenda = novo_df
+        st.sidebar.success("Dados importados com sucesso!")
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"Erro ao importar arquivo: {e}")
+
+# Debug (opcional)
+with st.sidebar.expander("🔧 Debug"):
+    st.write("Agendamentos atuais:")
+    st.write(df_agenda)
+    if st.button("Limpar todos os agendamentos"):
+        st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
+        st.rerun()
+
+# Instruções
 st.sidebar.markdown("---")
 st.sidebar.info("""
-**💡 Sincronização com GitHub:**
-1. Faça upload do arquivo `agenda_ensaios.csv` para seu repositório
-2. Atualize a variável `GITHUB_CSV_URL` no código
-3. Para sincronização automática, configure GitHub Actions
+**💡 Como usar:**
+1. Selecione data, banda e horário
+2. Clique em "Agendar Ensaio"
+3. O calendário será atualizado automaticamente
+
+**📊 Dados salvos:** Localmente na sessão
+**📤 Exportar:** Use o botão para baixar CSV
 """)
