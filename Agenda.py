@@ -10,11 +10,11 @@ st.set_page_config(page_title="Agenda de Ensaios", page_icon="🎵", layout="wid
 # Cores das bandas
 CORES_BANDAS = {
     'D1': '#FF6B6B',  # Vermelho
-    'D2': '#DDA0DD',  # Roxo (alterado)
+    'D2': '#FFEAA7',  # Amarelo (alterado)
     'D3': '#45B7D1',  # Azul
-    'D4': '#2E8B57',  # Verde escuro (alterado)
-    'S1': '#FF8C00',  # Laranja escuro (alterado)
-    'S2': '#DDA0DD'   # Roxo
+    'D4': '#DDA0DD',  # Roxo (alterado)
+    'S1': '#2E8B57',  # Verde escuro (alterado)
+    'S2': '#FF8C00'   # Laranja (alterado)
 }
 
 # Nomes completos das bandas
