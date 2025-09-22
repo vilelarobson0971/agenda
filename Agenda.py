@@ -58,7 +58,7 @@ def obter_agendamentos_do_dia(df, dia):
 
 # ---------------- INTERFACE PRINCIPAL ---------------- #
 
-st.title("🎵 Agenda de Ensaios de Bandas")
+st.title("🎵 Agenda de Ensaios ICCFV")
 st.markdown("---")
 
 # Carregar dados
@@ -270,3 +270,4 @@ st.sidebar.info("""
 **📊 Dados salvos:** Em `agenda.csv` no diretório do app
 **📤 Exportar:** Use o botão para baixar CSV
 """)
+
