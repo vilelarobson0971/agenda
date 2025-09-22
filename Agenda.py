@@ -214,22 +214,29 @@ if not df_agenda.empty:
 else:
     st.info("Nenhum ensaio agendado ainda.")
 
-# ---------------- LEGENDA ---------------- #
+# ---------------- LEGENDA DE CORES ---------------- #
 
 st.markdown("---")
-st.subheader("🎨 Legenda das Bandas")
+st.subheader("🎨 Legenda de Cores das Bandas")
 
-legenda_html = ""
-for tag, nome in NOMES_BANDAS.items():
-    cor = CORES_BANDAS[tag]
-    legenda_html += f"""
-    <div style='display:flex; align-items:center; margin:4px 0;'>
-        <div style='width:20px; height:20px; background:{cor}; border-radius:3px; margin-right:8px;'></div>
-        <span><b>{tag}</b> - {nome}</span>
-    </div>
-    """
+# Criar uma linha com as cores e nomes das bandas
+cols = st.columns(len(CORES_BANDAS))
 
-st.markdown(f"<div style='padding:8px; border:1px solid #ddd; border-radius:5px;'>{legenda_html}</div>", unsafe_allow_html=True)
+for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
+    with cols[i]:
+        st.markdown(f"""
+        <div style='
+            background-color: {cor};
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            margin: 5px;
+        '>
+            {banda} - {NOMES_BANDAS[banda]}
+        </div>
+        """, unsafe_allow_html=True)
 
 # ---------------- EXPORTAR / IMPORTAR ---------------- #
 
