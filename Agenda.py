@@ -163,11 +163,11 @@ with st.sidebar:
     **📤 Exportar:** Use o botão para baixar CSV
     """)
 
-# ---------------- CALENDÁRIO SIMPLIFICADO PARA MOBILE ---------------- #
+# ---------------- CALENDÁRIO CORRIGIDO ---------------- #
 
 st.header(f"Calendário de {MESES_PT[mes_atual]} de {ano_atual}")
 
-# CSS simplificado e mais eficaz
+# CSS corrigido - números sempre visíveis
 st.markdown("""
 <style>
     .calendar-grid {
@@ -189,7 +189,7 @@ st.markdown("""
     .calendar-day-cell {
         border: 1px solid #ddd;
         padding: 4px;
-        min-height: 70px;
+        min-height: 80px;
         background-color: white;
         position: relative;
     }
@@ -199,12 +199,8 @@ st.markdown("""
         font-size: 14px;
         text-align: center;
         margin-bottom: 3px;
-        background-color: #f8f9fa;
-        border-radius: 50%;
-        width: 25px;
-        height: 25px;
-        line-height: 25px;
-        margin: 0 auto 3px auto;
+        color: #333 !important; /* Garante que o número seja sempre visível */
+        display: block; /* Garante que o número seja exibido */
     }
     
     .calendar-event {
@@ -233,13 +229,27 @@ st.markdown("""
     
     .today-cell .calendar-day-number {
         background-color: #ff4444;
-        color: white;
+        color: white !important;
+        border-radius: 50%;
+        width: 25px;
+        height: 25px;
+        line-height: 25px;
+        margin: 0 auto 3px auto;
+    }
+    
+    .normal-day .calendar-day-number {
+        background-color: #f8f9fa;
+        border-radius: 50%;
+        width: 25px;
+        height: 25px;
+        line-height: 25px;
+        margin: 0 auto 3px auto;
     }
     
     .empty-cell {
         background-color: #f8f9fa;
         border: 1px solid #ddd;
-        min-height: 70px;
+        min-height: 80px;
     }
     
     /* Mobile first approach */
@@ -254,15 +264,20 @@ st.markdown("""
         }
         
         .calendar-day-cell {
-            min-height: 60px;
-            padding: 2px;
+            min-height: 70px;
+            padding: 3px;
         }
         
         .calendar-day-number {
             font-size: 12px;
-            width: 20px;
-            height: 20px;
-            line-height: 20px;
+        }
+        
+        .today-cell .calendar-day-number,
+        .normal-day .calendar-day-number {
+            width: 22px;
+            height: 22px;
+            line-height: 22px;
+            font-size: 12px;
         }
         
         .calendar-event {
@@ -275,20 +290,26 @@ st.markdown("""
         }
         
         .empty-cell {
-            min-height: 60px;
+            min-height: 70px;
         }
     }
     
     @media (max-width: 480px) {
         .calendar-day-cell {
-            min-height: 55px;
+            min-height: 65px;
+            padding: 2px;
         }
         
         .calendar-day-number {
             font-size: 11px;
-            width: 18px;
-            height: 18px;
-            line-height: 18px;
+        }
+        
+        .today-cell .calendar-day-number,
+        .normal-day .calendar-day-number {
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+            font-size: 11px;
         }
         
         .calendar-header-cell {
@@ -297,13 +318,13 @@ st.markdown("""
         }
         
         .empty-cell {
-            min-height: 55px;
+            min-height: 65px;
         }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Gerar o calendário usando CSS Grid (mais compatível com mobile)
+# Gerar o calendário usando CSS Grid
 cal = calendar.monthcalendar(ano_atual, mes_atual)
 dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 
@@ -325,15 +346,17 @@ for semana in cal:
             agendamentos_dia = obter_agendamentos_do_dia(df_agenda, data_dia)
             
             # Verificar se é hoje
-            classe_hoje = "today-cell" if data_dia == hoje else ""
+            if data_dia == hoje:
+                classe_celula = "today-cell"
+            else:
+                classe_celula = "normal-day"
             
-            calendario_html += f'<div class="calendar-day-cell {classe_hoje}">'
+            calendario_html += f'<div class="calendar-day-cell {classe_celula}">'
             calendario_html += f'<div class="calendar-day-number">{dia}</div>'
             
             if not agendamentos_dia.empty:
                 for _, ag in agendamentos_dia.iterrows():
                     cor = CORES_BANDAS[ag['banda']]
-                    # Mostrar apenas a banda para economizar espaço
                     calendario_html += f'<div class="calendar-event" style="background:{cor};">{ag["banda"]}</div>'
             else:
                 calendario_html += '<div class="calendar-available">Livre</div>'
@@ -393,7 +416,7 @@ st.markdown("---")
 st.subheader("🎨 Legenda de Cores das Bandas")
 
 # Layout responsivo para a legenda
-cols = st.columns(2)  # 2 colunas para mobile
+cols = st.columns(2)
 
 for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
     with cols[i % 2]:
@@ -411,20 +434,3 @@ for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
             {banda} - {NOMES_BANDAS[banda]}
         </div>
         """, unsafe_allow_html=True)
-
-# ---------------- INSTRUÇÕES ADICIONAIS PARA MOBILE ---------------- #
-
-st.markdown("---")
-with st.expander("📱 Dicas para uso em celular"):
-    st.markdown("""
-    **Para melhor visualização no celular:**
-    
-    • **Gire a tela horizontalmente** para ver o calendário completo
-    • **Toque nos dias** para ver mais detalhes
-    • **Use o menu lateral** para adicionar novos agendamentos
-    • **Deslize horizontalmente** se o calendário não couber na tela
-    
-    **Atalhos:**
-    • 🗑 - Excluir agendamento
-    • 📅 - Novo agendamento na sidebar
-    """)
