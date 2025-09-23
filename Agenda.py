@@ -3,6 +3,8 @@ import pandas as pd
 import datetime
 import calendar
 from datetime import date
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Configuração da página
 st.set_page_config(
@@ -41,24 +43,118 @@ MESES_PT = {
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
+# ---------------- CONFIGURAÇÃO GOOGLE SHEETS ---------------- #
+
+def setup_google_sheets():
+    """Configura a conexão com o Google Sheets"""
+    try:
+        # Criar dicionário de credenciais a partir dos secrets do Streamlit
+        creds_dict = {
+            "type": st.secrets["gcp_service_account"]["type"],
+            "project_id": st.secrets["gcp_service_account"]["project_id"],
+            "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+            "private_key": st.secrets["gcp_service_account"]["private_key"].replace('\\n', '\n'),
+            "client_email": st.secrets["gcp_service_account"]["client_email"],
+            "client_id": st.secrets["gcp_service_account"]["client_id"],
+            "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
+            "token_uri": st.secrets["gcp_service_account"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
+        }
+        
+        # Definir escopos
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        # Criar credenciais
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        gc = gspread.authorize(credentials)
+        
+        # Abrir a planilha pelo ID (que estará nos secrets)
+        spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
+        spreadsheet = gc.open_by_key(spreadsheet_id)
+        
+        # Selecionar a primeira worksheet
+        worksheet = spreadsheet.sheet1
+        
+        return worksheet
+    except Exception as e:
+        st.error(f"Erro na configuração do Google Sheets: {e}")
+        return None
+
+def carregar_dados_gsheets(worksheet):
+    """Carrega os dados do Google Sheets"""
+    try:
+        # Obter todos os registros
+        records = worksheet.get_all_records()
+        
+        if not records:
+            return pd.DataFrame(columns=['data', 'banda', 'horario'])
+        
+        df = pd.DataFrame(records)
+        df['data'] = pd.to_datetime(df['data']).dt.date
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return pd.DataFrame(columns=['data', 'banda', 'horario'])
+
+def salvar_dados_gsheets(worksheet, df):
+    """Salva os dados no Google Sheets"""
+    try:
+        # Limpar a worksheet
+        worksheet.clear()
+        
+        # Adicionar cabeçalhos
+        headers = ['data', 'banda', 'horario']
+        worksheet.append_row(headers)
+        
+        # Adicionar dados
+        if not df.empty:
+            for _, row in df.iterrows():
+                worksheet.append_row([
+                    row['data'].strftime('%Y-%m-%d'),
+                    row['banda'],
+                    row['horario']
+                ])
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar dados: {e}")
+        return False
+
 # ---------------- FUNÇÕES ---------------- #
 
 def carregar_dados():
-    """Carrega os dados do arquivo CSV ou inicializa vazio"""
+    """Carrega os dados do Google Sheets ou inicializa vazio"""
     if 'agenda' not in st.session_state:
-        try:
-            df = pd.read_csv("agenda.csv")
-            df['data'] = pd.to_datetime(df['data']).dt.date
+        if 'worksheet' not in st.session_state:
+            st.session_state.worksheet = setup_google_sheets()
+        
+        if st.session_state.worksheet:
+            df = carregar_dados_gsheets(st.session_state.worksheet)
             st.session_state.agenda = df
-        except FileNotFoundError:
+        else:
             st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
+    
     return st.session_state.agenda
 
 def salvar_dados(df):
-    """Salva os dados na session_state e em CSV"""
+    """Salva os dados na session_state e no Google Sheets"""
     df['data'] = pd.to_datetime(df['data']).dt.date
     st.session_state.agenda = df
-    df.to_csv("agenda.csv", index=False)
+    
+    if 'worksheet' not in st.session_state:
+        st.session_state.worksheet = setup_google_sheets()
+    
+    if st.session_state.worksheet:
+        success = salvar_dados_gsheets(st.session_state.worksheet, df)
+        if success:
+            st.success("Dados salvos com sucesso!")
+        else:
+            st.error("Erro ao salvar dados no Google Sheets")
+    else:
+        st.error("Não foi possível conectar ao Google Sheets")
 
 def obter_agendamentos_do_dia(df, dia):
     """Retorna os agendamentos para um determinado dia"""
@@ -68,7 +164,7 @@ def obter_agendamentos_do_dia(df, dia):
 
 # ---------------- INTERFACE PRINCIPAL ---------------- #
 
-st.title("🎵 Agenda de Ensaios ICCFV")
+st.title("🎵 Agenda de Ensaios ICCFV (Google Sheets)")
 st.markdown("---")
 
 # Carregar dados
@@ -118,7 +214,6 @@ with st.sidebar:
                 })
                 df_agenda = pd.concat([df_agenda, novo_agendamento], ignore_index=True)
                 salvar_dados(df_agenda)
-                st.success("✅ Agendamento salvo com sucesso!")
                 st.rerun()
     
     st.markdown("---")
@@ -133,13 +228,14 @@ with st.sidebar:
             mime="text/csv"
         )
 
+    # Upload de CSV para importar dados
     uploaded_file = st.file_uploader("📤 Importar CSV", type=['csv'])
     if uploaded_file is not None:
         try:
             novo_df = pd.read_csv(uploaded_file)
             novo_df['data'] = pd.to_datetime(novo_df['data']).dt.date
             st.session_state.agenda = novo_df
-            novo_df.to_csv("agenda.csv", index=False)
+            salvar_dados(novo_df)
             st.success("Dados importados com sucesso!")
             st.rerun()
         except Exception as e:
@@ -150,7 +246,7 @@ with st.sidebar:
         st.write(df_agenda)
         if st.button("Limpar todos os agendamentos"):
             st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
-            st.session_state.agenda.to_csv("agenda.csv", index=False)
+            salvar_dados(st.session_state.agenda)
             st.rerun()
     
     st.markdown("---")
@@ -161,7 +257,7 @@ with st.sidebar:
     3. O calendário será atualizado automaticamente
     4. Para excluir, use o botão 🗑 na lista do mês
 
-    **📊 Dados salvos:** Em `agenda.csv` no diretório do app
+    **📊 Dados salvos:** No Google Sheets (nuvem)
     **📤 Exportar:** Use o botão para baixar CSV
     """)
 
