@@ -79,7 +79,7 @@ hoje = date.today()
 with st.sidebar:
     st.header("📅 Navegação")
     mes_atual = st.selectbox("Mês", range(1, 13), index=hoje.month-1, format_func=lambda m: MESES_PT[m])
-    ano_atual = st.sidebar.selectbox("Ano", range(2023, 2031), index=hoje.year-2023)
+    ano_atual = st.selectbox("Ano", range(2023, 2031), index=hoje.year-2023)
     
     st.markdown("---")
     st.header("📅 Novo Agendamento")
@@ -163,60 +163,55 @@ with st.sidebar:
     **📤 Exportar:** Use o botão para baixar CSV
     """)
 
-# ---------------- CALENDÁRIO CORRIGIDO PARA MOBILE ---------------- #
+# ---------------- CALENDÁRIO SIMPLIFICADO PARA MOBILE ---------------- #
 
 st.header(f"Calendário de {MESES_PT[mes_atual]} de {ano_atual}")
 
-# CSS personalizado para corrigir problemas de mobile
+# CSS simplificado e mais eficaz
 st.markdown("""
 <style>
-    /* Estilos gerais para o calendário */
-    .calendar-container {
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 2px;
         width: 100%;
-        overflow-x: auto;
     }
     
-    .calendar-table {
-        width: 100%;
-        min-width: 300px;
-        border-collapse: collapse;
-    }
-    
-    .calendar-header {
+    .calendar-header-cell {
         background-color: #f0f2f6;
         font-weight: bold;
         text-align: center;
-        padding: 10px 5px;
+        padding: 8px 2px;
+        font-size: 12px;
         border: 1px solid #ddd;
     }
     
-    .calendar-day {
+    .calendar-day-cell {
         border: 1px solid #ddd;
-        padding: 5px;
-        vertical-align: top;
-        min-height: 80px;
-        height: 80px;
+        padding: 4px;
+        min-height: 70px;
+        background-color: white;
         position: relative;
     }
     
     .calendar-day-number {
         font-weight: bold;
         font-size: 14px;
-        margin-bottom: 3px;
         text-align: center;
+        margin-bottom: 3px;
         background-color: #f8f9fa;
         border-radius: 50%;
         width: 25px;
         height: 25px;
         line-height: 25px;
-        margin: 0 auto 5px auto;
+        margin: 0 auto 3px auto;
     }
     
     .calendar-event {
-        font-size: 10px;
-        padding: 2px 4px;
+        font-size: 9px;
+        padding: 2px 3px;
         margin: 1px 0;
-        border-radius: 3px;
+        border-radius: 2px;
         color: white;
         text-align: center;
         white-space: nowrap;
@@ -225,61 +220,46 @@ st.markdown("""
     }
     
     .calendar-available {
-        font-size: 9px;
+        font-size: 8px;
         color: #666;
         text-align: center;
         margin-top: 5px;
     }
     
-    .today {
+    .today-cell {
         background-color: #fff0f0 !important;
         border: 2px solid #ff4444 !important;
     }
     
-    .today .calendar-day-number {
+    .today-cell .calendar-day-number {
         background-color: #ff4444;
         color: white;
     }
     
-    /* Media queries para responsividade */
-    @media (max-width: 768px) {
-        .calendar-day {
-            min-height: 70px;
-            height: 70px;
-            padding: 3px;
-        }
-        
-        .calendar-day-number {
-            font-size: 12px;
-            width: 22px;
-            height: 22px;
-            line-height: 22px;
-        }
-        
-        .calendar-event {
-            font-size: 9px;
-            padding: 1px 2px;
-        }
-        
-        .calendar-available {
-            font-size: 8px;
-        }
-        
-        .calendar-header {
-            padding: 8px 3px;
-            font-size: 12px;
-        }
+    .empty-cell {
+        background-color: #f8f9fa;
+        border: 1px solid #ddd;
+        min-height: 70px;
     }
     
-    @media (max-width: 480px) {
-        .calendar-day {
+    /* Mobile first approach */
+    @media (max-width: 768px) {
+        .calendar-grid {
+            gap: 1px;
+        }
+        
+        .calendar-header-cell {
+            padding: 6px 1px;
+            font-size: 10px;
+        }
+        
+        .calendar-day-cell {
             min-height: 60px;
-            height: 60px;
             padding: 2px;
         }
         
         .calendar-day-number {
-            font-size: 11px;
+            font-size: 12px;
             width: 20px;
             height: 20px;
             line-height: 20px;
@@ -287,72 +267,80 @@ st.markdown("""
         
         .calendar-event {
             font-size: 8px;
-            padding: 1px;
+            padding: 1px 2px;
         }
         
-        .calendar-header {
-            padding: 6px 2px;
+        .calendar-available {
+            font-size: 7px;
+        }
+        
+        .empty-cell {
+            min-height: 60px;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .calendar-day-cell {
+            min-height: 55px;
+        }
+        
+        .calendar-day-number {
             font-size: 11px;
+            width: 18px;
+            height: 18px;
+            line-height: 18px;
+        }
+        
+        .calendar-header-cell {
+            font-size: 9px;
+            padding: 4px 1px;
+        }
+        
+        .empty-cell {
+            min-height: 55px;
         }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Gerar o calendário
+# Gerar o calendário usando CSS Grid (mais compatível com mobile)
 cal = calendar.monthcalendar(ano_atual, mes_atual)
 dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 
-# Criar o calendário usando HTML table para melhor compatibilidade mobile
-calendario_html = """
-<div class="calendar-container">
-    <table class="calendar-table">
-        <thead>
-            <tr>
-"""
+# Iniciar o HTML do calendário
+calendario_html = '<div class="calendar-grid">'
 
-# Cabeçalho dos dias da semana
+# Adicionar cabeçalho dos dias da semana
 for dia in dias_semana:
-    calendario_html += f'<th class="calendar-header">{dia}</th>'
+    calendario_html += f'<div class="calendar-header-cell">{dia}</div>'
 
-calendario_html += """
-            </tr>
-        </thead>
-        <tbody>
-"""
-
-# Dias do mês
+# Adicionar os dias do mês
 for semana in cal:
-    calendario_html += "<tr>"
-    
-    for i, dia in enumerate(semana):
+    for dia in semana:
         if dia == 0:
-            calendario_html += '<td class="calendar-day" style="background-color:#f8f9fa;"></td>'
+            # Dia vazio (fora do mês)
+            calendario_html += '<div class="empty-cell"></div>'
         else:
             data_dia = date(ano_atual, mes_atual, dia)
             agendamentos_dia = obter_agendamentos_do_dia(df_agenda, data_dia)
             
-            # Classe para o dia atual
-            classe_today = "today" if data_dia == hoje else ""
+            # Verificar se é hoje
+            classe_hoje = "today-cell" if data_dia == hoje else ""
             
-            calendario_html += f'<td class="calendar-day {classe_today}">'
+            calendario_html += f'<div class="calendar-day-cell {classe_hoje}">'
             calendario_html += f'<div class="calendar-day-number">{dia}</div>'
             
             if not agendamentos_dia.empty:
                 for _, ag in agendamentos_dia.iterrows():
                     cor = CORES_BANDAS[ag['banda']]
-                    calendario_html += f'<div class="calendar-event" style="background:{cor};">{ag["banda"]} {ag["horario"]}</div>'
+                    # Mostrar apenas a banda para economizar espaço
+                    calendario_html += f'<div class="calendar-event" style="background:{cor};">{ag["banda"]}</div>'
             else:
-                calendario_html += '<div class="calendar-available">Disponível</div>'
+                calendario_html += '<div class="calendar-available">Livre</div>'
             
-            calendario_html += '</td>'
-    
-    calendario_html += "</tr>"
+            calendario_html += '</div>'
 
-calendario_html += """
-        </tbody>
-    </table>
-</div>
-"""
+calendario_html += '</div>'
 
 st.markdown(calendario_html, unsafe_allow_html=True)
 
@@ -404,11 +392,11 @@ else:
 st.markdown("---")
 st.subheader("🎨 Legenda de Cores das Bandas")
 
-# Layout responsivo para a legenda (3 colunas em desktop, 2 em mobile)
-cols = st.columns(3)
+# Layout responsivo para a legenda
+cols = st.columns(2)  # 2 colunas para mobile
 
 for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
-    with cols[i % 3]:
+    with cols[i % 2]:
         st.markdown(f"""
         <div style='
             background-color: {cor};
@@ -423,3 +411,20 @@ for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
             {banda} - {NOMES_BANDAS[banda]}
         </div>
         """, unsafe_allow_html=True)
+
+# ---------------- INSTRUÇÕES ADICIONAIS PARA MOBILE ---------------- #
+
+st.markdown("---")
+with st.expander("📱 Dicas para uso em celular"):
+    st.markdown("""
+    **Para melhor visualização no celular:**
+    
+    • **Gire a tela horizontalmente** para ver o calendário completo
+    • **Toque nos dias** para ver mais detalhes
+    • **Use o menu lateral** para adicionar novos agendamentos
+    • **Deslize horizontalmente** se o calendário não couber na tela
+    
+    **Atalhos:**
+    • 🗑 - Excluir agendamento
+    • 📅 - Novo agendamento na sidebar
+    """)
