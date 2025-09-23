@@ -62,7 +62,12 @@ def conectar_sheets():
     # 1) Preferência: credenciais via st.secrets (campo google.credentials com JSON)
     if "google" in st.secrets and "credentials" in st.secrets["google"]:
         try:
-            creds_dict = json.loads(st.secrets["google"]["credentials"])
+            # Se já é um dicionário, usa diretamente
+            if isinstance(st.secrets["google"]["credentials"], dict):
+                creds_dict = st.secrets["google"]["credentials"]
+            else:
+                # Se é string, tenta converter de JSON
+                creds_dict = json.loads(st.secrets["google"]["credentials"])
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         except Exception as e:
             st.error(f"Erro ao ler credenciais do st.secrets: {e}")
@@ -83,41 +88,59 @@ def conectar_sheets():
             )
             st.stop()
 
-    cliente = gspread.authorize(creds)
-    planilha = cliente.open_by_key(SHEET_ID)
-    aba = planilha.worksheet(SHEET_NAME)
-    return aba
+    try:
+        cliente = gspread.authorize(creds)
+        planilha = cliente.open_by_key(SHEET_ID)
+        aba = planilha.worksheet(SHEET_NAME)
+        return aba
+    except Exception as e:
+        st.error(f"Erro ao conectar com Google Sheets: {e}")
+        st.stop()
 
 def carregar_dados():
     """Carrega os registros do Google Sheets para DataFrame."""
-    aba = conectar_sheets()
-    dados = aba.get_all_records()
-    if not dados:
-        return pd.DataFrame(columns=["data", "banda", "horario"])
-    df = pd.DataFrame(dados)
-    # Normaliza colunas (caso tenham nomes diferentes)
-    expected = ["data", "banda", "horario"]
-    for col in expected:
-        if col not in df.columns:
-            df[col] = ""
+    try:
+        aba = conectar_sheets()
+        dados = aba.get_all_records()
+        if not dados:
+            return pd.DataFrame(columns=["data", "banda", "horario"])
+        df = pd.DataFrame(dados)
+        
+        # Verifica se as colunas necessárias existem
+        expected = ["data", "banda", "horario"]
+        for col in expected:
+            if col not in df.columns:
+                df[col] = ""
 
-    # Converte data (assume dd/mm/YYYY armazenado)
-    df["data"] = pd.to_datetime(df["data"], dayfirst=True, errors="coerce").dt.date
-    return df[expected]
+        # Converte data (assume dd/mm/YYYY armazenado)
+        df["data"] = pd.to_datetime(df["data"], dayfirst=True, errors="coerce").dt.date
+        return df[expected]
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {e}")
+        return pd.DataFrame(columns=["data", "banda", "horario"])
 
 def salvar_dados(df):
     """Salva DataFrame no Google Sheets (substitui todo o conteúdo)."""
-    aba = conectar_sheets()
-    # Formatamos a data para dd/mm/YYYY na planilha
-    df_to_save = df.copy()
-    df_to_save["data"] = df_to_save["data"].apply(lambda d: d.strftime("%d/%m/%Y") if pd.notna(d) and d != "" else "")
-    aba.clear()
-    aba.update([df_to_save.columns.values.tolist()] + df_to_save.astype(str).values.tolist())
-    st.success("✅ Agendamento salvo no Google Sheets com sucesso!")
+    try:
+        aba = conectar_sheets()
+        # Formatamos a data para dd/mm/YYYY na planilha
+        df_to_save = df.copy()
+        df_to_save["data"] = df_to_save["data"].apply(lambda d: d.strftime("%d/%m/%Y") if pd.notna(d) and d != "" else "")
+        
+        # Prepara os dados para salvar
+        dados_para_salvar = [df_to_save.columns.values.tolist()] + df_to_save.astype(str).values.tolist()
+        
+        # Limpa a planilha e salva novos dados
+        aba.clear()
+        aba.update(dados_para_salvar)
+        st.success("✅ Agendamento salvo no Google Sheets com sucesso!")
+    except Exception as e:
+        st.error(f"Erro ao salvar dados: {e}")
 
 def obter_agendamentos_do_dia(df, dia):
+    """Retorna agendamentos para um dia específico."""
     if df.empty:
-        return pd.DataFrame(columns=["data","banda","horario"])
+        return pd.DataFrame(columns=["data", "banda", "horario"])
     return df[df["data"] == dia]
 
 # --------- UI ---------
@@ -129,8 +152,8 @@ st.markdown("---")
 df_agenda = carregar_dados()
 
 hoje = date.today()
-mes_atual = st.sidebar.selectbox("Mês", range(1, 13), index=hoje.month-1, format_func=lambda m: MESES_PT[m])
-ano_atual = st.sidebar.selectbox("Ano", range(2023, 2031), index=hoje.year-2023)
+mes_atual = st.sidebar.selectbox("Mês", list(range(1, 13)), index=hoje.month-1, format_func=lambda m: MESES_PT[m])
+ano_atual = st.sidebar.selectbox("Ano", list(range(2023, 2031)), index=hoje.year-2023)
 
 # Novo agendamento
 st.sidebar.header("📅 Novo Agendamento")
@@ -148,29 +171,40 @@ with st.sidebar.form("novo_agendamento", clear_on_submit=True):
         horario_str = horario_agendamento.strftime("%H:%M")
 
         # Conflito: mesma data + mesmo horário
-        conflito = df_agenda[
-            (df_agenda["data"] == data_agendamento) &
-            (df_agenda["horario"] == horario_str)
-        ]
-        if not conflito.empty:
-            st.sidebar.error(f"❌ Já existe ensaio em {data_agendamento.strftime('%d/%m/%Y')} às {horario_str}")
+        if not df_agenda.empty:
+            conflito = df_agenda[
+                (df_agenda["data"] == data_agendamento) &
+                (df_agenda["horario"] == horario_str)
+            ]
+            if not conflito.empty:
+                st.sidebar.error(f"❌ Já existe ensaio em {data_agendamento.strftime('%d/%m/%Y')} às {horario_str}")
+            else:
+                novo = pd.DataFrame({
+                    "data": [data_agendamento],
+                    "banda": [banda_selecionada],
+                    "horario": [horario_str]
+                })
+                df_agenda = pd.concat([df_agenda, novo], ignore_index=True)
+                salvar_dados(df_agenda)
+                st.rerun()
         else:
+            # Primeiro agendamento
             novo = pd.DataFrame({
-                "data":[data_agendamento],
-                "banda":[banda_selecionada],
-                "horario":[horario_str]
+                "data": [data_agendamento],
+                "banda": [banda_selecionada],
+                "horario": [horario_str]
             })
-            df_agenda = pd.concat([df_agenda, novo], ignore_index=True)
+            df_agenda = novo
             salvar_dados(df_agenda)
-            st.experimental_rerun()
+            st.rerun()
 
 # Calendário
 st.header(f"Calendário de {MESES_PT[mes_atual]} de {ano_atual}")
 cal = calendar.monthcalendar(ano_atual, mes_atual)
-dias_semana = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom']
+dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 
 cols = st.columns(7)
-for i,dia in enumerate(dias_semana):
+for i, dia in enumerate(dias_semana):
     cols[i].markdown(f"<div style='text-align:center;font-weight:bold'>{dia}</div>", unsafe_allow_html=True)
 
 for semana in cal:
@@ -207,16 +241,19 @@ st.markdown("---")
 st.subheader("📋 Agendamentos do Mês")
 
 if not df_agenda.empty:
+    # Filtra agendamentos do mês selecionado
     agendamentos_mes = df_agenda[
         (df_agenda['data'].apply(lambda x: x.month) == mes_atual) &
         (df_agenda['data'].apply(lambda x: x.year) == ano_atual)
-    ].sort_values(by=["data","horario"]).reset_index(drop=False)  # mantém index original para exclusão
+    ].sort_values(by=["data", "horario"]).reset_index(drop=True)
+    
+    # Adiciona índice original para exclusão
+    agendamentos_mes['index_original'] = agendamentos_mes.index
 
     if not agendamentos_mes.empty:
-        for _, row in agendamentos_mes.iterrows():
-            idx = int(row['index'])  # índice original no df_agenda
-            cor = CORES_BANDAS.get(row['banda'],"#666")
-            c1, c2 = st.columns([9,1])
+        for idx, row in agendamentos_mes.iterrows():
+            cor = CORES_BANDAS.get(row['banda'], "#666")
+            c1, c2 = st.columns([9, 1])
             with c1:
                 st.markdown(f"""
                 <div style='background-color:{cor};color:white;padding:12px;border-radius:5px;margin:5px 0;font-weight:bold;'>
@@ -225,9 +262,11 @@ if not df_agenda.empty:
                 """, unsafe_allow_html=True)
             with c2:
                 if st.button("🗑", key=f"del_{idx}"):
-                    df_agenda = df_agenda.drop(idx).reset_index(drop=True)
+                    # Remove o agendamento do DataFrame principal
+                    index_para_remover = agendamentos_mes.loc[idx, 'index_original']
+                    df_agenda = df_agenda.drop(index_para_remover).reset_index(drop=True)
                     salvar_dados(df_agenda)
-                    st.experimental_rerun()
+                    st.rerun()
     else:
         st.info("Nenhum ensaio agendado para este mês.")
 else:
@@ -241,3 +280,10 @@ st.sidebar.info("""
 - Se estiver usando Streamlit Cloud, coloque o JSON nas Secrets: [google] credentials = \"\"\"{...json...}\"\"\"
 - Certifique-se de ter adicionado gspread e oauth2client no requirements.txt e redeploy.
 """)
+
+# Debug (opcional - remova em produção)
+with st.sidebar.expander("🔧 Debug"):
+    st.write(f"Total de agendamentos: {len(df_agenda)}")
+    if not df_agenda.empty:
+        st.write("Últimos agendamentos:")
+        st.dataframe(df_agenda.tail(3))
