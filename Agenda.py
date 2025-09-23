@@ -167,7 +167,7 @@ with st.sidebar:
 
 st.header(f"Calendário de {MESES_PT[mes_atual]} de {ano_atual}")
 
-# CSS corrigido - números sempre visíveis
+# CSS corrigido - dias da semana sempre visíveis
 st.markdown("""
 <style>
     .calendar-grid {
@@ -184,6 +184,8 @@ st.markdown("""
         padding: 8px 2px;
         font-size: 12px;
         border: 1px solid #ddd;
+        color: #333 !important; /* Garante que o texto seja visível */
+        display: block !important; /* Garante que seja exibido */
     }
     
     .calendar-day-cell {
@@ -200,7 +202,7 @@ st.markdown("""
         text-align: center;
         margin-bottom: 3px;
         color: #333 !important; /* Garante que o número seja sempre visível */
-        display: block; /* Garante que o número seja exibido */
+        display: block !important; /* Garante que o número seja exibido */
     }
     
     .calendar-event {
@@ -260,7 +262,9 @@ st.markdown("""
         
         .calendar-header-cell {
             padding: 6px 1px;
-            font-size: 10px;
+            font-size: 10px !important; /* Garante tamanho no mobile */
+            color: #333 !important; /* Garante cor no mobile */
+            display: block !important; /* Garante exibição no mobile */
         }
         
         .calendar-day-cell {
@@ -304,6 +308,13 @@ st.markdown("""
             font-size: 11px;
         }
         
+        .calendar-header-cell {
+            font-size: 9px !important; /* Tamanho menor para mobile muito pequeno */
+            padding: 4px 1px;
+            color: #333 !important; /* Garante cor */
+            display: block !important; /* Garante exibição */
+        }
+        
         .today-cell .calendar-day-number,
         .normal-day .calendar-day-number {
             width: 20px;
@@ -312,14 +323,20 @@ st.markdown("""
             font-size: 11px;
         }
         
-        .calendar-header-cell {
-            font-size: 9px;
-            padding: 4px 1px;
-        }
-        
         .empty-cell {
             min-height: 65px;
         }
+        
+        .calendar-event {
+            font-size: 7px;
+        }
+    }
+    
+    /* Garantir que tudo seja visível em qualquer dispositivo */
+    .calendar-header-cell,
+    .calendar-day-number {
+        visibility: visible !important;
+        opacity: 1 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -331,7 +348,7 @@ dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 # Iniciar o HTML do calendário
 calendario_html = '<div class="calendar-grid">'
 
-# Adicionar cabeçalho dos dias da semana
+# Adicionar cabeçalho dos dias da semana - SEMPRE VISÍVEL
 for dia in dias_semana:
     calendario_html += f'<div class="calendar-header-cell">{dia}</div>'
 
