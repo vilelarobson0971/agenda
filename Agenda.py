@@ -19,7 +19,8 @@ CORES_BANDAS = {
     'D3': '#45B7D1',  # Azul
     'D4': '#DDA0DD',  # Roxo
     'S1': '#2E8B57',  # Verde escuro
-    'S2': '#FF8C00'   # Laranja
+    'S2': '#FF8C00',  # Laranja
+    'POD': '#696969'   # Cinza escuro - NOVA BANDA PODCAST
 }
 
 # Nomes completos das bandas
@@ -29,7 +30,8 @@ NOMES_BANDAS = {
     'D3': 'Banda D3',
     'D4': 'Banda D4',
     'S1': 'Banda S1',
-    'S2': 'Banda S2'
+    'S2': 'Banda S2',
+    'POD': 'Podcast'   # NOVA BANDA PODCAST
 }
 
 # Meses em português
@@ -432,11 +434,11 @@ else:
 st.markdown("---")
 st.subheader("🎨 Legenda de Cores das Bandas")
 
-# Layout responsivo para a legenda
-cols = st.columns(2)
+# Layout responsivo para a legenda (agora com 7 bandas, ajustamos para 3 colunas)
+cols = st.columns(3)
 
 for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
-    with cols[i % 2]:
+    with cols[i % 3]:
         st.markdown(f"""
         <div style='
             background-color: {cor};
@@ -451,3 +453,21 @@ for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
             {banda} - {NOMES_BANDAS[banda]}
         </div>
         """, unsafe_allow_html=True)
+
+# ---------------- INSTRUÇÕES ADICIONAIS ---------------- #
+
+st.markdown("---")
+with st.expander("📱 Dicas para uso em celular"):
+    st.markdown("""
+    **Para melhor visualização no celular:**
+    
+    • **Gire a tela horizontalmente** para ver o calendário completo
+    • **Toque nos dias** para ver mais detalhes
+    • **Use o menu lateral** para adicionar novos agendamentos
+    • **Deslize horizontalmente** se o calendário não couber na tela
+    
+    **Atalhos:**
+    • 🗑 - Excluir agendamento
+    • 📅 - Novo agendamento na sidebar
+    • 🎙 - Agendamentos de Podcast (nova funcionalidade)
+    """)
