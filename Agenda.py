@@ -66,6 +66,10 @@ def obter_agendamentos_do_dia(df, dia):
         return df
     return df[df['data'] == dia]
 
+def formatar_data_brasil(data):
+    """Formata a data no padrão brasileiro DD/MM/YYYY com zeros à esquerda"""
+    return data.strftime('%d/%m/%Y')
+
 # ---------------- INTERFACE PRINCIPAL ---------------- #
 
 st.title("🎵 Agenda de Ensaios ICCFV")
@@ -74,8 +78,8 @@ st.markdown("---")
 # Carregar dados
 df_agenda = carregar_dados()
 
-# Data atual
-hoje = date.today()
+# Data atual - CORRIGIDO: usando datetime.date.today() corretamente
+hoje = datetime.date.today()
 
 # Sidebar
 with st.sidebar:
@@ -108,7 +112,7 @@ with st.sidebar:
 
             if not conflito.empty:
                 st.error(
-                    f"❌ Já existe ensaio em {data_agendamento.strftime('%d/%m/%Y')} às {horario_str}"
+                    f"❌ Já existe ensaio em {formatar_data_brasil(data_agendamento)} às {horario_str}"
                 )
             else:
                 novo_agendamento = pd.DataFrame({
@@ -361,10 +365,10 @@ for semana in cal:
             # Dia vazio (fora do mês)
             calendario_html += '<div class="empty-cell"></div>'
         else:
-            data_dia = date(ano_atual, mes_atual, dia)
+            data_dia = datetime.date(ano_atual, mes_atual, dia)  # CORRIGIDO: usando datetime.date
             agendamentos_dia = obter_agendamentos_do_dia(df_agenda, data_dia)
             
-            # Verificar se é hoje
+            # Verificar se é hoje - CORRIGIDO: comparação correta
             if data_dia == hoje:
                 classe_celula = "today-cell"
             else:
@@ -414,7 +418,7 @@ if not df_agenda.empty:
                     font-weight: bold;
                     font-size: 14px;
                 '>
-                    📅 {agendamento['data'].strftime('%d/%m/%Y')} - 
+                    📅 {formatar_data_brasil(agendamento['data'])} - 
                     🎵 {agendamento['banda']} - 
                     ⏰ {agendamento['horario']}
                 </div>
