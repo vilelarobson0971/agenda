@@ -235,7 +235,7 @@ def obter_agendamentos_do_dia(df, dia):
 
 # ---------------- INTERFACE PRINCIPAL ---------------- #
 
-st.title("🎵 Agenda de Ensaios - EM DESELVOLVIMENTO")
+st.title("🎵 Agenda de Ensaios - EM DESENVOLVIMENTO")
 st.markdown("---")
 
 # Verificar se os secrets estão configurados
@@ -510,4 +510,5 @@ calendario_html += '</div>'
 st.markdown(calendario_html, unsafe_allow_html=True)
 
 # ... (o restante do código permanece igual) ...
+
 
