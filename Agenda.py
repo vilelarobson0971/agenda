@@ -3,9 +3,6 @@ import pandas as pd
 import datetime
 import calendar
 from datetime import date
-import gspread
-from google.oauth2.service_account import Credentials
-import json
 
 # Configuração da página
 st.set_page_config(
@@ -44,188 +41,24 @@ MESES_PT = {
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
-# ---------------- CONFIGURAÇÃO GOOGLE SHEETS ---------------- #
-
-def setup_google_sheets():
-    """Configura a conexão com o Google Sheets"""
-    try:
-        # Método 1: Tentar carregar como JSON string direto
-        creds_info = {
-            "type": st.secrets["gcp_service_account"]["type"],
-            "project_id": st.secrets["gcp_service_account"]["project_id"],
-            "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
-            "private_key": st.secrets["gcp_service_account"]["private_key"],
-            "client_email": st.secrets["gcp_service_account"]["client_email"],
-            "client_id": st.secrets["gcp_service_account"]["client_id"],
-            "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
-            "token_uri": st.secrets["gcp_service_account"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
-        }
-        
-        # Definir escopos
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        
-        # Criar credenciais
-        credentials = Credentials.from_service_account_info(creds_info, scopes=scopes)
-        gc = gspread.authorize(credentials)
-        
-        # Abrir a planilha pelo ID
-        spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
-        spreadsheet = gc.open_by_key(spreadsheet_id)
-        
-        # Selecionar a primeira worksheet
-        worksheet = spreadsheet.sheet1
-        
-        # Verificar se a worksheet tem cabeçalhos, se não, criar
-        try:
-            existing_data = worksheet.get_all_records()
-        except:
-            # Se estiver vazia, adicionar cabeçalhos
-            worksheet.append_row(['data', 'banda', 'horario'])
-        
-        return worksheet
-        
-    except Exception as e:
-        st.error(f"Erro na configuração do Google Sheets: {str(e)}")
-        # Tentar método alternativo com arquivo temporário
-        try:
-            return setup_google_sheets_alternative()
-        except Exception as e2:
-            st.error(f"Erro alternativo também falhou: {str(e2)}")
-            return None
-
-def setup_google_sheets_alternative():
-    """Método alternativo para configuração"""
-    try:
-        # Criar um arquivo JSON temporário em memória
-        import tempfile
-        import os
-        
-        creds_info = {
-            "type": st.secrets["gcp_service_account"]["type"],
-            "project_id": st.secrets["gcp_service_account"]["project_id"],
-            "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
-            "private_key": st.secrets["gcp_service_account"]["private_key"],
-            "client_email": st.secrets["gcp_service_account"]["client_email"],
-            "client_id": st.secrets["gcp_service_account"]["client_id"],
-            "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
-            "token_uri": st.secrets["gcp_service_account"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
-        }
-        
-        # Criar arquivo temporário
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-            json.dump(creds_info, temp_file)
-            temp_file_path = temp_file.name
-        
-        # Usar o arquivo temporário
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        
-        credentials = Credentials.from_service_account_file(temp_file_path, scopes=scopes)
-        gc = gspread.authorize(credentials)
-        
-        # Abrir a planilha
-        spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
-        spreadsheet = gc.open_by_key(spreadsheet_id)
-        worksheet = spreadsheet.sheet1
-        
-        # Limpar arquivo temporário
-        os.unlink(temp_file_path)
-        
-        return worksheet
-        
-    except Exception as e:
-        st.error(f"Erro no método alternativo: {str(e)}")
-        return None
-
-def carregar_dados_gsheets(worksheet):
-    """Carrega os dados do Google Sheets"""
-    try:
-        # Obter todos os registros
-        records = worksheet.get_all_records()
-        
-        if not records:
-            return pd.DataFrame(columns=['data', 'banda', 'horario'])
-        
-        df = pd.DataFrame(records)
-        # Converter a coluna de data
-        df['data'] = pd.to_datetime(df['data'], errors='coerce').dt.date
-        # Remover linhas com datas inválidas
-        df = df.dropna(subset=['data'])
-        return df
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
-        return pd.DataFrame(columns=['data', 'banda', 'horario'])
-
-def salvar_dados_gsheets(worksheet, df):
-    """Salva os dados no Google Sheets"""
-    try:
-        # Limpar a worksheet completamente
-        worksheet.clear()
-        
-        # Adicionar cabeçalhos
-        headers = ['data', 'banda', 'horario']
-        worksheet.append_row(headers)
-        
-        # Adicionar dados se não estiver vazio
-        if not df.empty:
-            # Converter para o formato correto
-            df_to_save = df.copy()
-            df_to_save['data'] = df_to_save['data'].astype(str)
-            
-            # Adicionar linhas em batch
-            values = df_to_save.values.tolist()
-            if values:
-                worksheet.append_rows(values)
-        
-        return True
-    except Exception as e:
-        st.error(f"Erro ao salvar dados: {e}")
-        return False
-
 # ---------------- FUNÇÕES ---------------- #
 
 def carregar_dados():
-    """Carrega os dados do Google Sheets ou inicializa vazio"""
+    """Carrega os dados do arquivo CSV ou inicializa vazio"""
     if 'agenda' not in st.session_state:
-        if 'worksheet' not in st.session_state:
-            st.session_state.worksheet = setup_google_sheets()
-        
-        if st.session_state.worksheet:
-            df = carregar_dados_gsheets(st.session_state.worksheet)
+        try:
+            df = pd.read_csv("agenda.csv")
+            df['data'] = pd.to_datetime(df['data']).dt.date
             st.session_state.agenda = df
-        else:
+        except FileNotFoundError:
             st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
-    
     return st.session_state.agenda
 
 def salvar_dados(df):
-    """Salva os dados na session_state e no Google Sheets"""
-    # Garantir que a coluna de data está no formato correto
-    df_copy = df.copy()
-    df_copy['data'] = pd.to_datetime(df_copy['data']).dt.date
-    
-    st.session_state.agenda = df_copy
-    
-    if 'worksheet' not in st.session_state:
-        st.session_state.worksheet = setup_google_sheets()
-    
-    if st.session_state.worksheet:
-        success = salvar_dados_gsheets(st.session_state.worksheet, df_copy)
-        if success:
-            st.success("✅ Dados salvos com sucesso no Google Sheets!")
-        else:
-            st.error("❌ Erro ao salvar dados no Google Sheets")
-    else:
-        st.error("❌ Não foi possível conectar ao Google Sheets")
+    """Salva os dados na session_state e em CSV"""
+    df['data'] = pd.to_datetime(df['data']).dt.date
+    st.session_state.agenda = df
+    df.to_csv("agenda.csv", index=False)
 
 def obter_agendamentos_do_dia(df, dia):
     """Retorna os agendamentos para um determinado dia"""
@@ -235,13 +68,8 @@ def obter_agendamentos_do_dia(df, dia):
 
 # ---------------- INTERFACE PRINCIPAL ---------------- #
 
-st.title("🎵 Agenda de Ensaios - EM DESENVOLVIMENTO")
+st.title("🎵 Agenda de Ensaios ICCFV")
 st.markdown("---")
-
-# Verificar se os secrets estão configurados
-if 'gcp_service_account' not in st.secrets:
-    st.error("❌ Configuração do Google Sheets não encontrada. Verifique o arquivo secrets.toml")
-    st.stop()
 
 # Carregar dados
 df_agenda = carregar_dados()
@@ -290,6 +118,7 @@ with st.sidebar:
                 })
                 df_agenda = pd.concat([df_agenda, novo_agendamento], ignore_index=True)
                 salvar_dados(df_agenda)
+                st.success("✅ Agendamento salvo com sucesso!")
                 st.rerun()
     
     st.markdown("---")
@@ -304,33 +133,24 @@ with st.sidebar:
             mime="text/csv"
         )
 
-    # Upload de CSV para importar dados
     uploaded_file = st.file_uploader("📤 Importar CSV", type=['csv'])
     if uploaded_file is not None:
         try:
             novo_df = pd.read_csv(uploaded_file)
             novo_df['data'] = pd.to_datetime(novo_df['data']).dt.date
             st.session_state.agenda = novo_df
-            salvar_dados(novo_df)
-            st.success("✅ Dados importados com sucesso!")
+            novo_df.to_csv("agenda.csv", index=False)
+            st.success("Dados importados com sucesso!")
             st.rerun()
         except Exception as e:
-            st.error(f"❌ Erro ao importar arquivo: {e}")
+            st.error(f"Erro ao importar arquivo: {e}")
     
     with st.expander("🔧 Debug"):
         st.write("Agendamentos atuais:")
         st.write(df_agenda)
-        
-        if st.button("🔄 Recarregar dados do Google Sheets"):
-            if 'worksheet' in st.session_state:
-                del st.session_state.worksheet
-            if 'agenda' in st.session_state:
-                del st.session_state.agenda
-            st.rerun()
-            
-        if st.button("🗑️ Limpar todos os agendamentos"):
+        if st.button("Limpar todos os agendamentos"):
             st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
-            salvar_dados(st.session_state.agenda)
+            st.session_state.agenda.to_csv("agenda.csv", index=False)
             st.rerun()
     
     st.markdown("---")
@@ -341,17 +161,15 @@ with st.sidebar:
     3. O calendário será atualizado automaticamente
     4. Para excluir, use o botão 🗑 na lista do mês
 
-    **📊 Dados salvos:** No Google Sheets (nuvem)
+    **📊 Dados salvos:** Em `agenda.csv` no diretório do app
     **📤 Exportar:** Use o botão para baixar CSV
     """)
 
-# ... (o restante do código do calendário permanece igual) ...
-
-# ---------------- CALENDÁRIO ---------------- #
+# ---------------- CALENDÁRIO CORRIGIDO ---------------- #
 
 st.header(f"Calendário de {MESES_PT[mes_atual]} de {ano_atual}")
 
-# CSS (mantido igual)
+# CSS corrigido - dias da semana sempre visíveis
 st.markdown("""
 <style>
     .calendar-grid {
@@ -368,8 +186,8 @@ st.markdown("""
         padding: 8px 2px;
         font-size: 12px;
         border: 1px solid #ddd;
-        color: #333 !important;
-        display: block !important;
+        color: #333 !important; /* Garante que o texto seja visível */
+        display: block !important; /* Garante que seja exibido */
     }
     
     .calendar-day-cell {
@@ -385,8 +203,8 @@ st.markdown("""
         font-size: 14px;
         text-align: center;
         margin-bottom: 3px;
-        color: #333 !important;
-        display: block !important;
+        color: #333 !important; /* Garante que o número seja sempre visível */
+        display: block !important; /* Garante que o número seja exibido */
     }
     
     .calendar-event {
@@ -438,32 +256,89 @@ st.markdown("""
         min-height: 80px;
     }
     
+    /* Mobile first approach */
     @media (max-width: 768px) {
-        .calendar-grid { gap: 1px; }
-        .calendar-header-cell { padding: 6px 1px; font-size: 10px !important; }
-        .calendar-day-cell { min-height: 70px; padding: 3px; }
-        .calendar-day-number { font-size: 12px; }
-        .today-cell .calendar-day-number, .normal-day .calendar-day-number {
-            width: 22px; height: 22px; line-height: 22px; font-size: 12px;
+        .calendar-grid {
+            gap: 1px;
         }
-        .calendar-event { font-size: 8px; padding: 1px 2px; }
-        .calendar-available { font-size: 7px; }
-        .empty-cell { min-height: 70px; }
+        
+        .calendar-header-cell {
+            padding: 6px 1px;
+            font-size: 10px !important; /* Garante tamanho no mobile */
+            color: #333 !important; /* Garante cor no mobile */
+            display: block !important; /* Garante exibição no mobile */
+        }
+        
+        .calendar-day-cell {
+            min-height: 70px;
+            padding: 3px;
+        }
+        
+        .calendar-day-number {
+            font-size: 12px;
+        }
+        
+        .today-cell .calendar-day-number,
+        .normal-day .calendar-day-number {
+            width: 22px;
+            height: 22px;
+            line-height: 22px;
+            font-size: 12px;
+        }
+        
+        .calendar-event {
+            font-size: 8px;
+            padding: 1px 2px;
+        }
+        
+        .calendar-available {
+            font-size: 7px;
+        }
+        
+        .empty-cell {
+            min-height: 70px;
+        }
     }
     
     @media (max-width: 480px) {
-        .calendar-day-cell { min-height: 65px; padding: 2px; }
-        .calendar-day-number { font-size: 11px; }
-        .calendar-header-cell { font-size: 9px !important; padding: 4px 1px; }
-        .today-cell .calendar-day-number, .normal-day .calendar-day-number {
-            width: 20px; height: 20px; line-height: 20px; font-size: 11px;
+        .calendar-day-cell {
+            min-height: 65px;
+            padding: 2px;
         }
-        .empty-cell { min-height: 65px; }
-        .calendar-event { font-size: 7px; }
+        
+        .calendar-day-number {
+            font-size: 11px;
+        }
+        
+        .calendar-header-cell {
+            font-size: 9px !important; /* Tamanho menor para mobile muito pequeno */
+            padding: 4px 1px;
+            color: #333 !important; /* Garante cor */
+            display: block !important; /* Garante exibição */
+        }
+        
+        .today-cell .calendar-day-number,
+        .normal-day .calendar-day-number {
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+            font-size: 11px;
+        }
+        
+        .empty-cell {
+            min-height: 65px;
+        }
+        
+        .calendar-event {
+            font-size: 7px;
+        }
     }
     
-    .calendar-header-cell, .calendar-day-number {
-        visibility: visible !important; opacity: 1 !important;
+    /* Garantir que tudo seja visível em qualquer dispositivo */
+    .calendar-header-cell,
+    .calendar-day-number {
+        visibility: visible !important;
+        opacity: 1 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -475,7 +350,7 @@ dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 # Iniciar o HTML do calendário
 calendario_html = '<div class="calendar-grid">'
 
-# Adicionar cabeçalho dos dias da semana
+# Adicionar cabeçalho dos dias da semana - SEMPRE VISÍVEL
 for dia in dias_semana:
     calendario_html += f'<div class="calendar-header-cell">{dia}</div>'
 
@@ -483,11 +358,13 @@ for dia in dias_semana:
 for semana in cal:
     for dia in semana:
         if dia == 0:
+            # Dia vazio (fora do mês)
             calendario_html += '<div class="empty-cell"></div>'
         else:
             data_dia = date(ano_atual, mes_atual, dia)
             agendamentos_dia = obter_agendamentos_do_dia(df_agenda, data_dia)
             
+            # Verificar se é hoje
             if data_dia == hoje:
                 classe_celula = "today-cell"
             else:
@@ -509,6 +386,88 @@ calendario_html += '</div>'
 
 st.markdown(calendario_html, unsafe_allow_html=True)
 
-# ... (o restante do código permanece igual) ...
+# ---------------- LISTA DE AGENDAMENTOS ---------------- #
 
+st.markdown("---")
+st.subheader("📋 Agendamentos do Mês")
 
+if not df_agenda.empty:
+    agendamentos_mes = df_agenda[
+        (df_agenda['data'].apply(lambda x: x.month) == mes_atual) &
+        (df_agenda['data'].apply(lambda x: x.year) == ano_atual)
+    ].sort_values(by=["data", "horario"])
+
+    if not agendamentos_mes.empty:
+        for idx, agendamento in agendamentos_mes.iterrows():
+            cor = CORES_BANDAS[agendamento['banda']]
+            
+            # Layout responsivo para a lista
+            col1, col2 = st.columns([8, 1])
+            with col1:
+                st.markdown(f"""
+                <div style='
+                    background-color: {cor};
+                    color: white;
+                    padding: 10px;
+                    border-radius: 5px;
+                    margin: 5px 0;
+                    font-weight: bold;
+                    font-size: 14px;
+                '>
+                    📅 {agendamento['data'].strftime('%d/%m/%Y')} - 
+                    🎵 {agendamento['banda']} - 
+                    ⏰ {agendamento['horario']}
+                </div>
+                """, unsafe_allow_html=True)
+            with col2:
+                if st.button("🗑", key=f"del_{idx}"):
+                    df_agenda = df_agenda.drop(idx).reset_index(drop=True)
+                    salvar_dados(df_agenda)
+                    st.rerun()
+    else:
+        st.info("Nenhum ensaio agendado para este mês.")
+else:
+    st.info("Nenhum ensaio agendado ainda.")
+
+# ---------------- LEGENDA DE CORES ---------------- #
+
+st.markdown("---")
+st.subheader("🎨 Legenda de Cores das Bandas")
+
+# Layout responsivo para a legenda (agora com 7 bandas, ajustamos para 3 colunas)
+cols = st.columns(3)
+
+for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
+    with cols[i % 3]:
+        st.markdown(f"""
+        <div style='
+            background-color: {cor};
+            color: white;
+            padding: 8px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            margin: 3px 0;
+            font-size: 12px;
+        '>
+            {banda} - {NOMES_BANDAS[banda]}
+        </div>
+        """, unsafe_allow_html=True)
+
+# ---------------- INSTRUÇÕES ADICIONAIS ---------------- #
+
+st.markdown("---")
+with st.expander("📱 Dicas para uso em celular"):
+    st.markdown("""
+    **Para melhor visualização no celular:**
+    
+    • **Gire a tela horizontalmente** para ver o calendário completo
+    • **Toque nos dias** para ver mais detalhes
+    • **Use o menu lateral** para adicionar novos agendamentos
+    • **Deslize horizontalmente** se o calendário não couber na tela
+    
+    **Atalhos:**
+    • 🗑 - Excluir agendamento
+    • 📅 - Novo agendamento na sidebar
+    • 🎙 - Agendamentos de Podcast (nova funcionalidade)
+    """)
