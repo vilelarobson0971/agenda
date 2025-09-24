@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import calendar
-from datetime import date
+from datetime import date, timedelta
 
 # Configuração da página
 st.set_page_config(
@@ -70,6 +70,61 @@ def formatar_data_brasil(data):
     """Formata a data no padrão brasileiro DD/MM/YYYY com zeros à esquerda"""
     return data.strftime('%d/%m/%Y')
 
+def gerar_calendario(ano, mes, df_agenda, hoje):
+    """Gera o HTML do calendário corretamente"""
+    # Obter o primeiro dia do mês e o último dia do mês
+    primeiro_dia = date(ano, mes, 1)
+    ultimo_dia = date(ano, mes, calendar.monthrange(ano, mes)[1])
+    
+    # Obter o dia da semana do primeiro dia (0=segunda, 6=domingo)
+    primeiro_dia_semana = primeiro_dia.weekday()  # 0=segunda, 6=domingo
+    
+    # Dias da semana
+    dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+    
+    # Iniciar o HTML do calendário
+    calendario_html = '<div class="calendar-grid">'
+    
+    # Cabeçalho com dias da semana
+    for dia in dias_semana:
+        calendario_html += f'<div class="calendar-header-cell">{dia}</div>'
+    
+    # Dias vazios no início (do mês anterior)
+    for i in range(primeiro_dia_semana):
+        calendario_html += '<div class="empty-cell"></div>'
+    
+    # Dias do mês atual
+    for dia in range(1, ultimo_dia.day + 1):
+        data_dia = date(ano, mes, dia)
+        agendamentos_dia = obter_agendamentos_do_dia(df_agenda, data_dia)
+        
+        # Verificar se é hoje
+        if data_dia == hoje:
+            classe_celula = "today-cell"
+        else:
+            classe_celula = "normal-day"
+        
+        calendario_html += f'<div class="calendar-day-cell {classe_celula}">'
+        calendario_html += f'<div class="calendar-day-number">{dia}</div>'
+        
+        if not agendamentos_dia.empty:
+            for _, ag in agendamentos_dia.iterrows():
+                cor = CORES_BANDAS[ag['banda']]
+                calendario_html += f'<div class="calendar-event" style="background:{cor};">{ag["banda"]} {ag["horario"]}</div>'
+        else:
+            calendario_html += '<div class="calendar-available">Livre</div>'
+        
+        calendario_html += '</div>'
+    
+    # Completar a última semana com dias vazios se necessário
+    ultimo_dia_semana = ultimo_dia.weekday()
+    dias_restantes = 6 - ultimo_dia_semana
+    for i in range(dias_restantes):
+        calendario_html += '<div class="empty-cell"></div>'
+    
+    calendario_html += '</div>'
+    return calendario_html
+
 # ---------------- INTERFACE PRINCIPAL ---------------- #
 
 st.title("🎵 Agenda de Ensaios ICCFV")
@@ -78,8 +133,11 @@ st.markdown("---")
 # Carregar dados
 df_agenda = carregar_dados()
 
-# Data atual - CORRIGIDO: usando datetime.date.today() corretamente
-hoje = datetime.date.today()
+# Data atual - CORRIGIDO
+hoje = date.today()
+
+# DEBUG: Mostrar data atual
+st.sidebar.markdown(f"**DEBUG:** Hoje é {formatar_data_brasil(hoje)}")
 
 # Sidebar
 with st.sidebar:
@@ -101,7 +159,7 @@ with st.sidebar:
         submitted = st.form_submit_button("Agendar Ensaio")
 
         if submitted:
-            data_agendamento = pd.to_datetime(data_agendamento).date()
+            data_agendamento = data_agendamento  # Já é date object
             horario_str = horario_agendamento.strftime('%H:%M')
 
             # Verifica conflito (mesma data + horário)
@@ -152,6 +210,7 @@ with st.sidebar:
     with st.expander("🔧 Debug"):
         st.write("Agendamentos atuais:")
         st.write(df_agenda)
+        st.write(f"Data de hoje: {hoje}")
         if st.button("Limpar todos os agendamentos"):
             st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
             st.session_state.agenda.to_csv("agenda.csv", index=False)
@@ -173,7 +232,7 @@ with st.sidebar:
 
 st.header(f"Calendário de {MESES_PT[mes_atual]} de {ano_atual}")
 
-# CSS corrigido - dias da semana sempre visíveis
+# CSS para o calendário
 st.markdown("""
 <style>
     .calendar-grid {
@@ -190,8 +249,8 @@ st.markdown("""
         padding: 8px 2px;
         font-size: 12px;
         border: 1px solid #ddd;
-        color: #333 !important; /* Garante que o texto seja visível */
-        display: block !important; /* Garante que seja exibido */
+        color: #333 !important;
+        display: block !important;
     }
     
     .calendar-day-cell {
@@ -207,8 +266,8 @@ st.markdown("""
         font-size: 14px;
         text-align: center;
         margin-bottom: 3px;
-        color: #333 !important; /* Garante que o número seja sempre visível */
-        display: block !important; /* Garante que o número seja exibido */
+        color: #333 !important;
+        display: block !important;
     }
     
     .calendar-event {
@@ -259,135 +318,11 @@ st.markdown("""
         border: 1px solid #ddd;
         min-height: 80px;
     }
-    
-    /* Mobile first approach */
-    @media (max-width: 768px) {
-        .calendar-grid {
-            gap: 1px;
-        }
-        
-        .calendar-header-cell {
-            padding: 6px 1px;
-            font-size: 10px !important; /* Garante tamanho no mobile */
-            color: #333 !important; /* Garante cor no mobile */
-            display: block !important; /* Garante exibição no mobile */
-        }
-        
-        .calendar-day-cell {
-            min-height: 70px;
-            padding: 3px;
-        }
-        
-        .calendar-day-number {
-            font-size: 12px;
-        }
-        
-        .today-cell .calendar-day-number,
-        .normal-day .calendar-day-number {
-            width: 22px;
-            height: 22px;
-            line-height: 22px;
-            font-size: 12px;
-        }
-        
-        .calendar-event {
-            font-size: 8px;
-            padding: 1px 2px;
-        }
-        
-        .calendar-available {
-            font-size: 7px;
-        }
-        
-        .empty-cell {
-            min-height: 70px;
-        }
-    }
-    
-    @media (max-width: 480px) {
-        .calendar-day-cell {
-            min-height: 65px;
-            padding: 2px;
-        }
-        
-        .calendar-day-number {
-            font-size: 11px;
-        }
-        
-        .calendar-header-cell {
-            font-size: 9px !important; /* Tamanho menor para mobile muito pequeno */
-            padding: 4px 1px;
-            color: #333 !important; /* Garante cor */
-            display: block !important; /* Garante exibição */
-        }
-        
-        .today-cell .calendar-day-number,
-        .normal-day .calendar-day-number {
-            width: 20px;
-            height: 20px;
-            line-height: 20px;
-            font-size: 11px;
-        }
-        
-        .empty-cell {
-            min-height: 65px;
-        }
-        
-        .calendar-event {
-            font-size: 7px;
-        }
-    }
-    
-    /* Garantir que tudo seja visível em qualquer dispositivo */
-    .calendar-header-cell,
-    .calendar-day-number {
-        visibility: visible !important;
-        opacity: 1 !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# Gerar o calendário usando CSS Grid
-cal = calendar.monthcalendar(ano_atual, mes_atual)
-dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
-
-# Iniciar o HTML do calendário
-calendario_html = '<div class="calendar-grid">'
-
-# Adicionar cabeçalho dos dias da semana - SEMPRE VISÍVEL
-for dia in dias_semana:
-    calendario_html += f'<div class="calendar-header-cell">{dia}</div>'
-
-# Adicionar os dias do mês
-for semana in cal:
-    for dia in semana:
-        if dia == 0:
-            # Dia vazio (fora do mês)
-            calendario_html += '<div class="empty-cell"></div>'
-        else:
-            data_dia = datetime.date(ano_atual, mes_atual, dia)  # CORRIGIDO: usando datetime.date
-            agendamentos_dia = obter_agendamentos_do_dia(df_agenda, data_dia)
-            
-            # Verificar se é hoje - CORRIGIDO: comparação correta
-            if data_dia == hoje:
-                classe_celula = "today-cell"
-            else:
-                classe_celula = "normal-day"
-            
-            calendario_html += f'<div class="calendar-day-cell {classe_celula}">'
-            calendario_html += f'<div class="calendar-day-number">{dia}</div>'
-            
-            if not agendamentos_dia.empty:
-                for _, ag in agendamentos_dia.iterrows():
-                    cor = CORES_BANDAS[ag['banda']]
-                    calendario_html += f'<div class="calendar-event" style="background:{cor};">{ag["banda"]}</div>'
-            else:
-                calendario_html += '<div class="calendar-available">Livre</div>'
-            
-            calendario_html += '</div>'
-
-calendario_html += '</div>'
-
+# Gerar o calendário CORRETAMENTE
+calendario_html = gerar_calendario(ano_atual, mes_atual, df_agenda, hoje)
 st.markdown(calendario_html, unsafe_allow_html=True)
 
 # ---------------- LISTA DE AGENDAMENTOS ---------------- #
@@ -405,7 +340,6 @@ if not df_agenda.empty:
         for idx, agendamento in agendamentos_mes.iterrows():
             cor = CORES_BANDAS[agendamento['banda']]
             
-            # Layout responsivo para a lista
             col1, col2 = st.columns([8, 1])
             with col1:
                 st.markdown(f"""
@@ -438,9 +372,7 @@ else:
 st.markdown("---")
 st.subheader("🎨 Legenda de Cores das Bandas")
 
-# Layout responsivo para a legenda (agora com 7 bandas, ajustamos para 3 colunas)
 cols = st.columns(3)
-
 for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
     with cols[i % 3]:
         st.markdown(f"""
@@ -457,21 +389,3 @@ for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
             {banda} - {NOMES_BANDAS[banda]}
         </div>
         """, unsafe_allow_html=True)
-
-# ---------------- INSTRUÇÕES ADICIONAIS ---------------- #
-
-st.markdown("---")
-with st.expander("📱 Dicas para uso em celular"):
-    st.markdown("""
-    **Para melhor visualização no celular:**
-    
-    • **Gire a tela horizontalmente** para ver o calendário completo
-    • **Toque nos dias** para ver mais detalhes
-    • **Use o menu lateral** para adicionar novos agendamentos
-    • **Deslize horizontalmente** se o calendário não couber na tela
-    
-    **Atalhos:**
-    • 🗑 - Excluir agendamento
-    • 📅 - Novo agendamento na sidebar
-    • 🎙 - Agendamentos de Podcast (nova funcionalidade)
-    """)
