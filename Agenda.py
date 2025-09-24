@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import calendar
 from datetime import date, timedelta
+import pytz
 
 # Configuração da página
 st.set_page_config(
@@ -42,6 +43,13 @@ MESES_PT = {
 }
 
 # ---------------- FUNÇÕES ---------------- #
+
+def obter_data_brasil():
+    """Obtém a data atual no fuso horário do Brasil"""
+    fuso_brasil = pytz.timezone('America/Sao_Paulo')
+    data_utc = datetime.datetime.now(pytz.utc)
+    data_brasil = data_utc.astimezone(fuso_brasil)
+    return data_brasil.date()
 
 def carregar_dados():
     """Carrega os dados do arquivo CSV ou inicializa vazio"""
@@ -133,17 +141,20 @@ st.markdown("---")
 # Carregar dados
 df_agenda = carregar_dados()
 
-# Data atual - CORRIGIDO
-hoje = date.today()
-
-# DEBUG: Mostrar data atual
-st.sidebar.markdown(f"**DEBUG:** Hoje é {formatar_data_brasil(hoje)}")
+# Data atual - CORRIGIDO: usando fuso horário do Brasil
+hoje = obter_data_brasil()
 
 # Sidebar
 with st.sidebar:
     st.header("📅 Navegação")
     mes_atual = st.selectbox("Mês", range(1, 13), index=hoje.month-1, format_func=lambda m: MESES_PT[m])
     ano_atual = st.selectbox("Ano", range(2023, 2031), index=hoje.year-2023)
+    
+    # Informação de debug
+    with st.expander("ℹ️ Informações do sistema"):
+        st.write(f"**Data do servidor (UTC):** {datetime.datetime.utcnow().strftime('%d/%m/%Y %H:%M:%S')}")
+        st.write(f"**Data local (Brasil):** {formatar_data_brasil(hoje)}")
+        st.write(f"**Hora local (Brasil):** {datetime.datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%H:%M:%S')}")
     
     st.markdown("---")
     st.header("📅 Novo Agendamento")
@@ -210,7 +221,7 @@ with st.sidebar:
     with st.expander("🔧 Debug"):
         st.write("Agendamentos atuais:")
         st.write(df_agenda)
-        st.write(f"Data de hoje: {hoje}")
+        st.write(f"Data de hoje (Brasil): {hoje}")
         if st.button("Limpar todos os agendamentos"):
             st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
             st.session_state.agenda.to_csv("agenda.csv", index=False)
@@ -318,6 +329,80 @@ st.markdown("""
         border: 1px solid #ddd;
         min-height: 80px;
     }
+    
+    /* Mobile first approach */
+    @media (max-width: 768px) {
+        .calendar-grid {
+            gap: 1px;
+        }
+        
+        .calendar-header-cell {
+            padding: 6px 1px;
+            font-size: 10px !important;
+        }
+        
+        .calendar-day-cell {
+            min-height: 70px;
+            padding: 3px;
+        }
+        
+        .calendar-day-number {
+            font-size: 12px;
+        }
+        
+        .today-cell .calendar-day-number,
+        .normal-day .calendar-day-number {
+            width: 22px;
+            height: 22px;
+            line-height: 22px;
+            font-size: 12px;
+        }
+        
+        .calendar-event {
+            font-size: 8px;
+            padding: 1px 2px;
+        }
+        
+        .calendar-available {
+            font-size: 7px;
+        }
+        
+        .empty-cell {
+            min-height: 70px;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .calendar-day-cell {
+            min-height: 65px;
+            padding: 2px;
+        }
+        
+        .calendar-day-number {
+            font-size: 11px;
+        }
+        
+        .calendar-header-cell {
+            font-size: 9px !important;
+            padding: 4px 1px;
+        }
+        
+        .today-cell .calendar-day-number,
+        .normal-day .calendar-day-number {
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+            font-size: 11px;
+        }
+        
+        .empty-cell {
+            min-height: 65px;
+        }
+        
+        .calendar-event {
+            font-size: 7px;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -389,3 +474,21 @@ for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
             {banda} - {NOMES_BANDAS[banda]}
         </div>
         """, unsafe_allow_html=True)
+
+# ---------------- INSTRUÇÕES ADICIONAIS ---------------- #
+
+st.markdown("---")
+with st.expander("📱 Dicas para uso em celular"):
+    st.markdown("""
+    **Para melhor visualização no celular:**
+    
+    • **Gire a tela horizontalmente** para ver o calendário completo
+    • **Toque nos dias** para ver mais detalhes
+    • **Use o menu lateral** para adicionar novos agendamentos
+    • **Deslize horizontalmente** se o calendário não couber na tela
+    
+    **Atalhos:**
+    • 🗑 - Excluir agendamento
+    • 📅 - Novo agendamento na sidebar
+    • 🎙 - Agendamentos de Podcast (nova funcionalidade)
+    """)
