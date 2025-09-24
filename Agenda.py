@@ -4,6 +4,10 @@ import datetime
 import calendar
 from datetime import date, timedelta
 import pytz
+import gspread
+from google.oauth2.service_account import Credentials
+import json
+import os
 
 # Configuração da página
 st.set_page_config(
@@ -42,6 +46,57 @@ MESES_PT = {
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
+# ---------------- CONFIGURAÇÃO DO GOOGLE SHEETS ---------------- #
+
+# Função para obter credenciais do Streamlit Secrets (recomendado) ou de variável de ambiente
+def get_google_credentials():
+    # Tenta carregar do Streamlit Secrets (mais seguro)
+    try:
+        creds_json = st.secrets["google_sheets"]["credentials"]
+        creds_dict = json.loads(creds_json)
+    except Exception as e:
+        st.error("Erro ao carregar credenciais do Google Sheets. Verifique o arquivo secrets.toml.")
+        st.stop()
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+
+# ID da planilha do Google Sheets (substitua pelo seu)
+GOOGLE_SHEET_ID = st.secrets["google_sheets"]["sheet_id"]
+WORKSHEET_NAME = "agenda"  # nome da aba
+
+def carregar_dados_google():
+    """Carrega os dados da Google Sheet"""
+    try:
+        creds = get_google_credentials()
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(WORKSHEET_NAME)
+        data = sheet.get_all_records()
+        if data:
+            df = pd.DataFrame(data)
+            df['data'] = pd.to_datetime(df['data']).dt.date
+        else:
+            df = pd.DataFrame(columns=['data', 'banda', 'horario'])
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar dados do Google Sheets: {e}")
+        return pd.DataFrame(columns=['data', 'banda', 'horario'])
+
+def salvar_dados_google(df):
+    """Salva o DataFrame na Google Sheet"""
+    try:
+        creds = get_google_credentials()
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(WORKSHEET_NAME)
+        # Limpar a planilha (mantendo o cabeçalho)
+        sheet.clear()
+        # Escrever cabeçalho
+        sheet.append_row(['data', 'banda', 'horario'])
+        # Escrever dados
+        for _, row in df.iterrows():
+            sheet.append_row([row['data'].strftime('%Y-%m-%d'), row['banda'], row['horario']])
+    except Exception as e:
+        st.error(f"Erro ao salvar no Google Sheets: {e}")
+
 # ---------------- FUNÇÕES ---------------- #
 
 def obter_data_brasil():
@@ -52,21 +107,16 @@ def obter_data_brasil():
     return data_brasil.date()
 
 def carregar_dados():
-    """Carrega os dados do arquivo CSV ou inicializa vazio"""
+    """Carrega os dados da Google Sheet"""
     if 'agenda' not in st.session_state:
-        try:
-            df = pd.read_csv("agenda.csv")
-            df['data'] = pd.to_datetime(df['data']).dt.date
-            st.session_state.agenda = df
-        except FileNotFoundError:
-            st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
+        st.session_state.agenda = carregar_dados_google()
     return st.session_state.agenda
 
 def salvar_dados(df):
-    """Salva os dados na session_state e em CSV"""
+    """Salva os dados na session_state e na Google Sheet"""
     df['data'] = pd.to_datetime(df['data']).dt.date
     st.session_state.agenda = df
-    df.to_csv("agenda.csv", index=False)
+    salvar_dados_google(df)
 
 def obter_agendamentos_do_dia(df, dia):
     """Retorna os agendamentos para um determinado dia"""
@@ -80,37 +130,24 @@ def formatar_data_brasil(data):
 
 def gerar_calendario(ano, mes, df_agenda, hoje):
     """Gera o HTML do calendário corretamente"""
-    # Obter o primeiro dia do mês e o último dia do mês
     primeiro_dia = date(ano, mes, 1)
     ultimo_dia = date(ano, mes, calendar.monthrange(ano, mes)[1])
-    
-    # Obter o dia da semana do primeiro dia (0=segunda, 6=domingo)
     primeiro_dia_semana = primeiro_dia.weekday()  # 0=segunda, 6=domingo
-    
-    # Dias da semana
     dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
     
-    # Iniciar o HTML do calendário
     calendario_html = '<div class="calendar-grid">'
     
-    # Cabeçalho com dias da semana
     for dia in dias_semana:
         calendario_html += f'<div class="calendar-header-cell">{dia}</div>'
     
-    # Dias vazios no início (do mês anterior)
     for i in range(primeiro_dia_semana):
         calendario_html += '<div class="empty-cell"></div>'
     
-    # Dias do mês atual
     for dia in range(1, ultimo_dia.day + 1):
         data_dia = date(ano, mes, dia)
         agendamentos_dia = obter_agendamentos_do_dia(df_agenda, data_dia)
         
-        # Verificar se é hoje
-        if data_dia == hoje:
-            classe_celula = "today-cell"
-        else:
-            classe_celula = "normal-day"
+        classe_celula = "today-cell" if data_dia == hoje else "normal-day"
         
         calendario_html += f'<div class="calendar-day-cell {classe_celula}">'
         calendario_html += f'<div class="calendar-day-number">{dia}</div>'
@@ -124,7 +161,6 @@ def gerar_calendario(ano, mes, df_agenda, hoje):
         
         calendario_html += '</div>'
     
-    # Completar a última semana com dias vazios se necessário
     ultimo_dia_semana = ultimo_dia.weekday()
     dias_restantes = 6 - ultimo_dia_semana
     for i in range(dias_restantes):
@@ -138,19 +174,14 @@ def gerar_calendario(ano, mes, df_agenda, hoje):
 st.title("🎵 Agenda de Ensaios ICCFV")
 st.markdown("---")
 
-# Carregar dados
 df_agenda = carregar_dados()
-
-# Data atual - CORRIGIDO: usando fuso horário do Brasil
 hoje = obter_data_brasil()
 
-# Sidebar
 with st.sidebar:
     st.header("📅 Navegação")
     mes_atual = st.selectbox("Mês", range(1, 13), index=hoje.month-1, format_func=lambda m: MESES_PT[m])
     ano_atual = st.selectbox("Ano", range(2023, 2031), index=hoje.year-2023)
     
-    # Informação de debug
     with st.expander("ℹ️ Informações do sistema"):
         st.write(f"**Data do servidor (UTC):** {datetime.datetime.utcnow().strftime('%d/%m/%Y %H:%M:%S')}")
         st.write(f"**Data local (Brasil):** {formatar_data_brasil(hoje)}")
@@ -170,10 +201,9 @@ with st.sidebar:
         submitted = st.form_submit_button("Agendar Ensaio")
 
         if submitted:
-            data_agendamento = data_agendamento  # Já é date object
+            data_agendamento = data_agendamento
             horario_str = horario_agendamento.strftime('%H:%M')
 
-            # Verifica conflito (mesma data + horário)
             conflito = df_agenda[
                 (df_agenda['data'] == data_agendamento) &
                 (df_agenda['horario'] == horario_str)
@@ -212,7 +242,7 @@ with st.sidebar:
             novo_df = pd.read_csv(uploaded_file)
             novo_df['data'] = pd.to_datetime(novo_df['data']).dt.date
             st.session_state.agenda = novo_df
-            novo_df.to_csv("agenda.csv", index=False)
+            salvar_dados(novo_df)
             st.success("Dados importados com sucesso!")
             st.rerun()
         except Exception as e:
@@ -224,7 +254,7 @@ with st.sidebar:
         st.write(f"Data de hoje (Brasil): {hoje}")
         if st.button("Limpar todos os agendamentos"):
             st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
-            st.session_state.agenda.to_csv("agenda.csv", index=False)
+            salvar_dados(st.session_state.agenda)
             st.rerun()
     
     st.markdown("---")
@@ -235,15 +265,14 @@ with st.sidebar:
     3. O calendário será atualizado automaticamente
     4. Para excluir, use o botão 🗑 na lista do mês
 
-    **📊 Dados salvos:** Em `agenda.csv` no diretório do app
+    **📊 Dados salvos:** Na Google Sheet configurada
     **📤 Exportar:** Use o botão para baixar CSV
     """)
 
-# ---------------- CALENDÁRIO CORRIGIDO ---------------- #
+# ---------------- CALENDÁRIO ---------------- #
 
 st.header(f"Calendário de {MESES_PT[mes_atual]} de {ano_atual}")
 
-# CSS para o calendário
 st.markdown("""
 <style>
     .calendar-grid {
@@ -330,83 +359,34 @@ st.markdown("""
         min-height: 80px;
     }
     
-    /* Mobile first approach */
     @media (max-width: 768px) {
-        .calendar-grid {
-            gap: 1px;
-        }
-        
-        .calendar-header-cell {
-            padding: 6px 1px;
-            font-size: 10px !important;
-        }
-        
-        .calendar-day-cell {
-            min-height: 70px;
-            padding: 3px;
-        }
-        
-        .calendar-day-number {
-            font-size: 12px;
-        }
-        
+        .calendar-grid { gap: 1px; }
+        .calendar-header-cell { padding: 6px 1px; font-size: 10px !important; }
+        .calendar-day-cell { min-height: 70px; padding: 3px; }
+        .calendar-day-number { font-size: 12px; }
         .today-cell .calendar-day-number,
         .normal-day .calendar-day-number {
-            width: 22px;
-            height: 22px;
-            line-height: 22px;
-            font-size: 12px;
+            width: 22px; height: 22px; line-height: 22px; font-size: 12px;
         }
-        
-        .calendar-event {
-            font-size: 8px;
-            padding: 1px 2px;
-        }
-        
-        .calendar-available {
-            font-size: 7px;
-        }
-        
-        .empty-cell {
-            min-height: 70px;
-        }
+        .calendar-event { font-size: 8px; padding: 1px 2px; }
+        .calendar-available { font-size: 7px; }
+        .empty-cell { min-height: 70px; }
     }
     
     @media (max-width: 480px) {
-        .calendar-day-cell {
-            min-height: 65px;
-            padding: 2px;
-        }
-        
-        .calendar-day-number {
-            font-size: 11px;
-        }
-        
-        .calendar-header-cell {
-            font-size: 9px !important;
-            padding: 4px 1px;
-        }
-        
+        .calendar-day-cell { min-height: 65px; padding: 2px; }
+        .calendar-day-number { font-size: 11px; }
+        .calendar-header-cell { font-size: 9px !important; padding: 4px 1px; }
         .today-cell .calendar-day-number,
         .normal-day .calendar-day-number {
-            width: 20px;
-            height: 20px;
-            line-height: 20px;
-            font-size: 11px;
+            width: 20px; height: 20px; line-height: 20px; font-size: 11px;
         }
-        
-        .empty-cell {
-            min-height: 65px;
-        }
-        
-        .calendar-event {
-            font-size: 7px;
-        }
+        .empty-cell { min-height: 65px; }
+        .calendar-event { font-size: 7px; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Gerar o calendário CORRETAMENTE
 calendario_html = gerar_calendario(ano_atual, mes_atual, df_agenda, hoje)
 st.markdown(calendario_html, unsafe_allow_html=True)
 
@@ -424,7 +404,6 @@ if not df_agenda.empty:
     if not agendamentos_mes.empty:
         for idx, agendamento in agendamentos_mes.iterrows():
             cor = CORES_BANDAS[agendamento['banda']]
-            
             col1, col2 = st.columns([8, 1])
             with col1:
                 st.markdown(f"""
