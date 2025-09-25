@@ -340,7 +340,7 @@ st.markdown(calendario_html, unsafe_allow_html=True)
 st.markdown("---")
 # Tamanho original do h3 no Streamlit ≈ 1.17em (~18.72px)
 # Antes: 40% → agora: 40% * 1.3 = 52%
-st.markdown('<h3 style="font-size: 52%;">📋 Agendamentos do Mês</h3>', unsafe_allow_html=True)
+st.markdown('<h3 style="font-size: 99%;">📋 Agendamentos do Mês</h3>', unsafe_allow_html=True)
 
 if not df_agenda.empty:
     agendamentos_mes = df_agenda[
@@ -426,5 +426,6 @@ with st.expander("📱 Dicas para uso em celular"):
     • 📅 - Novo agendamento na sidebar  
     • 🎙 - Agendamentos de Podcast (nova funcionalidade)
     """)
+
 
 
