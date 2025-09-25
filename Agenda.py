@@ -381,7 +381,7 @@ else:
 # ---------------- LEGENDA DE CORES ---------------- #
 
 st.markdown("---")
-st.markdown('<h3 style="font-size: 80%;">🎨 Legenda de Cores das Bandas</h3>', unsafe_allow_html=True)
+st.markdown('<h3 style="font-size: 99%;">🎨 Legenda de Cores das Bandas</h3>', unsafe_allow_html=True)
 
 # Ordem fixa desejada
 ORDEM_LEGENDA = ['D1', 'D2', 'D3', 'D4', 'S1', 'S2', 'POD']
@@ -426,4 +426,5 @@ with st.expander("📱 Dicas para uso em celular"):
     • 📅 - Novo agendamento na sidebar  
     • 🎙 - Agendamentos de Podcast (nova funcionalidade)
     """)
+
 
