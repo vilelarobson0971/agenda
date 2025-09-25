@@ -338,8 +338,9 @@ st.markdown(calendario_html, unsafe_allow_html=True)
 # ---------------- LISTA DE AGENDAMENTOS ---------------- #
 
 st.markdown("---")
-# Reduzido em 60% → 40% do tamanho original (100% * 0.4 = 40%)
-st.markdown('<h3 style="font-size: 40%;">📋 Agendamentos do Mês</h3>', unsafe_allow_html=True)
+# Tamanho original do h3 no Streamlit ≈ 1.17em (~18.72px)
+# Antes: 40% → agora: 40% * 1.3 = 52%
+st.markdown('<h3 style="font-size: 52%;">📋 Agendamentos do Mês</h3>', unsafe_allow_html=True)
 
 if not df_agenda.empty:
     agendamentos_mes = df_agenda[
@@ -380,29 +381,33 @@ else:
 # ---------------- LEGENDA DE CORES ---------------- #
 
 st.markdown("---")
-st.markdown('<h3 style="font-size: 40%;">🎨 Legenda de Cores das Bandas</h3>', unsafe_allow_html=True)
+st.markdown('<h3 style="font-size: 52%;">🎨 Legenda de Cores das Bandas</h3>', unsafe_allow_html=True)
 
 # Ordem fixa desejada
 ORDEM_LEGENDA = ['D1', 'D2', 'D3', 'D4', 'S1', 'S2', 'POD']
 
-cols = st.columns(3)
-for i, banda in enumerate(ORDEM_LEGENDA):
-    cor = CORES_BANDAS[banda]
-    with cols[i % 3]:
-        st.markdown(f"""
-        <div style='
-            background-color: {cor};
-            color: white;
-            padding: 8px;
-            border-radius: 5px;
-            text-align: center;
-            font-weight: bold;
-            margin: 3px 0;
-            font-size: 12px;
-        '>
-            {banda} - {NOMES_BANDAS[banda]}
-        </div>
-        """, unsafe_allow_html=True)
+# Renderização em blocos de 3 por linha para manter ordem visual correta
+for i in range(0, len(ORDEM_LEGENDA), 3):
+    cols = st.columns(3)
+    for j in range(3):
+        if i + j < len(ORDEM_LEGENDA):
+            banda = ORDEM_LEGENDA[i + j]
+            cor = CORES_BANDAS[banda]
+            with cols[j]:
+                st.markdown(f"""
+                <div style='
+                    background-color: {cor};
+                    color: white;
+                    padding: 8px;
+                    border-radius: 5px;
+                    text-align: center;
+                    font-weight: bold;
+                    margin: 3px 0;
+                    font-size: 12px;
+                '>
+                    {banda} - {NOMES_BANDAS[banda]}
+                </div>
+                """, unsafe_allow_html=True)
 
 # ---------------- INSTRUÇÕES ADICIONAIS ---------------- #
 
