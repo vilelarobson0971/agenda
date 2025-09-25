@@ -7,7 +7,6 @@ import pytz
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import os
 
 # Configuração da página
 st.set_page_config(
@@ -36,7 +35,7 @@ NOMES_BANDAS = {
     'D4': 'Banda D4',
     'S1': 'Banda S1',
     'S2': 'Banda S2',
-    'POD': 'Podcast'   # NOVA BANDA PODCAST
+    'POD': 'Podcast'
 }
 
 # Meses em português
@@ -48,9 +47,7 @@ MESES_PT = {
 
 # ---------------- CONFIGURAÇÃO DO GOOGLE SHEETS ---------------- #
 
-# Função para obter credenciais do Streamlit Secrets (recomendado) ou de variável de ambiente
 def get_google_credentials():
-    # Tenta carregar do Streamlit Secrets (mais seguro)
     try:
         creds_json = st.secrets["google_sheets"]["credentials"]
         creds_dict = json.loads(creds_json)
@@ -60,12 +57,10 @@ def get_google_credentials():
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     return Credentials.from_service_account_info(creds_dict, scopes=scopes)
 
-# ID da planilha do Google Sheets (substitua pelo seu)
 GOOGLE_SHEET_ID = st.secrets["google_sheets"]["sheet_id"]
-WORKSHEET_NAME = "agenda"  # nome da aba
+WORKSHEET_NAME = "agenda"
 
 def carregar_dados_google():
-    """Carrega os dados da Google Sheet"""
     try:
         creds = get_google_credentials()
         client = gspread.authorize(creds)
@@ -82,16 +77,12 @@ def carregar_dados_google():
         return pd.DataFrame(columns=['data', 'banda', 'horario'])
 
 def salvar_dados_google(df):
-    """Salva o DataFrame na Google Sheet"""
     try:
         creds = get_google_credentials()
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(WORKSHEET_NAME)
-        # Limpar a planilha (mantendo o cabeçalho)
         sheet.clear()
-        # Escrever cabeçalho
         sheet.append_row(['data', 'banda', 'horario'])
-        # Escrever dados
         for _, row in df.iterrows():
             sheet.append_row([row['data'].strftime('%Y-%m-%d'), row['banda'], row['horario']])
     except Exception as e:
@@ -100,39 +91,33 @@ def salvar_dados_google(df):
 # ---------------- FUNÇÕES ---------------- #
 
 def obter_data_brasil():
-    """Obtém a data atual no fuso horário do Brasil"""
     fuso_brasil = pytz.timezone('America/Sao_Paulo')
     data_utc = datetime.datetime.now(pytz.utc)
     data_brasil = data_utc.astimezone(fuso_brasil)
     return data_brasil.date()
 
 def carregar_dados():
-    """Carrega os dados da Google Sheet"""
     if 'agenda' not in st.session_state:
         st.session_state.agenda = carregar_dados_google()
     return st.session_state.agenda
 
 def salvar_dados(df):
-    """Salva os dados na session_state e na Google Sheet"""
     df['data'] = pd.to_datetime(df['data']).dt.date
     st.session_state.agenda = df
     salvar_dados_google(df)
 
 def obter_agendamentos_do_dia(df, dia):
-    """Retorna os agendamentos para um determinado dia"""
     if df.empty:
         return df
     return df[df['data'] == dia]
 
 def formatar_data_brasil(data):
-    """Formata a data no padrão brasileiro DD/MM/YYYY com zeros à esquerda"""
     return data.strftime('%d/%m/%Y')
 
 def gerar_calendario(ano, mes, df_agenda, hoje):
-    """Gera o HTML do calendário corretamente"""
     primeiro_dia = date(ano, mes, 1)
     ultimo_dia = date(ano, mes, calendar.monthrange(ano, mes)[1])
-    primeiro_dia_semana = primeiro_dia.weekday()  # 0=segunda, 6=domingo
+    primeiro_dia_semana = primeiro_dia.weekday()
     dias_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
     
     calendario_html = '<div class="calendar-grid">'
@@ -182,11 +167,6 @@ with st.sidebar:
     mes_atual = st.selectbox("Mês", range(1, 13), index=hoje.month-1, format_func=lambda m: MESES_PT[m])
     ano_atual = st.selectbox("Ano", range(2023, 2031), index=hoje.year-2023)
     
-    with st.expander("ℹ️ Informações do sistema"):
-        st.write(f"**Data do servidor (UTC):** {datetime.datetime.utcnow().strftime('%d/%m/%Y %H:%M:%S')}")
-        st.write(f"**Data local (Brasil):** {formatar_data_brasil(hoje)}")
-        st.write(f"**Hora local (Brasil):** {datetime.datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%H:%M:%S')}")
-    
     st.markdown("---")
     st.header("📅 Novo Agendamento")
     
@@ -201,7 +181,6 @@ with st.sidebar:
         submitted = st.form_submit_button("Agendar Ensaio")
 
         if submitted:
-            data_agendamento = data_agendamento
             horario_str = horario_agendamento.strftime('%H:%M')
 
             conflito = df_agenda[
@@ -223,40 +202,7 @@ with st.sidebar:
                 salvar_dados(df_agenda)
                 st.success("✅ Agendamento salvo com sucesso!")
                 st.rerun()
-    
-    st.markdown("---")
-    st.header("💾 Gerenciar Dados")
-    
-    if not df_agenda.empty:
-        csv = df_agenda.to_csv(index=False)
-        st.download_button(
-            label="📥 Exportar Agenda (CSV)",
-            data=csv,
-            file_name=f"agenda_ensaios_{hoje.strftime('%Y%m%d')}.csv",
-            mime="text/csv"
-        )
 
-    uploaded_file = st.file_uploader("📤 Importar CSV", type=['csv'])
-    if uploaded_file is not None:
-        try:
-            novo_df = pd.read_csv(uploaded_file)
-            novo_df['data'] = pd.to_datetime(novo_df['data']).dt.date
-            st.session_state.agenda = novo_df
-            salvar_dados(novo_df)
-            st.success("Dados importados com sucesso!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Erro ao importar arquivo: {e}")
-    
-    with st.expander("🔧 Debug"):
-        st.write("Agendamentos atuais:")
-        st.write(df_agenda)
-        st.write(f"Data de hoje (Brasil): {hoje}")
-        if st.button("Limpar todos os agendamentos"):
-            st.session_state.agenda = pd.DataFrame(columns=['data', 'banda', 'horario'])
-            salvar_dados(st.session_state.agenda)
-            st.rerun()
-    
     st.markdown("---")
     st.info("""
     **💡 Como usar:**
@@ -266,7 +212,6 @@ with st.sidebar:
     4. Para excluir, use o botão 🗑 na lista do mês
 
     **📊 Dados salvos:** Na Google Sheet configurada
-    **📤 Exportar:** Use o botão para baixar CSV
     """)
 
 # ---------------- CALENDÁRIO ---------------- #
@@ -393,7 +338,8 @@ st.markdown(calendario_html, unsafe_allow_html=True)
 # ---------------- LISTA DE AGENDAMENTOS ---------------- #
 
 st.markdown("---")
-st.subheader("📋 Agendamentos do Mês")
+# Reduzido em 60% → 40% do tamanho original (100% * 0.4 = 40%)
+st.markdown('<h3 style="font-size: 40%;">📋 Agendamentos do Mês</h3>', unsafe_allow_html=True)
 
 if not df_agenda.empty:
     agendamentos_mes = df_agenda[
@@ -434,10 +380,14 @@ else:
 # ---------------- LEGENDA DE CORES ---------------- #
 
 st.markdown("---")
-st.subheader("🎨 Legenda de Cores das Bandas")
+st.markdown('<h3 style="font-size: 40%;">🎨 Legenda de Cores das Bandas</h3>', unsafe_allow_html=True)
+
+# Ordem fixa desejada
+ORDEM_LEGENDA = ['D1', 'D2', 'D3', 'D4', 'S1', 'S2', 'POD']
 
 cols = st.columns(3)
-for i, (banda, cor) in enumerate(CORES_BANDAS.items()):
+for i, banda in enumerate(ORDEM_LEGENDA):
+    cor = CORES_BANDAS[banda]
     with cols[i % 3]:
         st.markdown(f"""
         <div style='
@@ -461,13 +411,13 @@ with st.expander("📱 Dicas para uso em celular"):
     st.markdown("""
     **Para melhor visualização no celular:**
     
-    • **Gire a tela horizontalmente** para ver o calendário completo
-    • **Toque nos dias** para ver mais detalhes
-    • **Use o menu lateral** para adicionar novos agendamentos
-    • **Deslize horizontalmente** se o calendário não couber na tela
+    • **Gire a tela horizontalmente** para ver o calendário completo  
+    • **Toque nos dias** para ver mais detalhes  
+    • **Use o menu lateral** para adicionar novos agendamentos  
+    • **Deslize horizontalmente** se o calendário não couber na tela  
     
-    **Atalhos:**
-    • 🗑 - Excluir agendamento
-    • 📅 - Novo agendamento na sidebar
+    **Atalhos:**  
+    • 🗑 - Excluir agendamento  
+    • 📅 - Novo agendamento na sidebar  
     • 🎙 - Agendamentos de Podcast (nova funcionalidade)
     """)
