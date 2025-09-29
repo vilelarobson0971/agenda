@@ -260,7 +260,7 @@ st.markdown("""
         padding: 2px 3px;
         margin: 1px 0;
         border-radius: 2px;
-        color: white;
+        color: black;  /* ALTERADO DE WHITE PARA BLACK */
         text-align: center;
         white-space: nowrap;
         overflow: hidden;
@@ -426,6 +426,3 @@ with st.expander("📱 Dicas para uso em celular"):
     • 📅 - Novo agendamento na sidebar  
     • 🎙 - Agendamentos de Podcast (nova funcionalidade)
     """)
-
-
-
